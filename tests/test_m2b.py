@@ -69,7 +69,7 @@ def test_llm_analysis_cache(app):
     assert first==second and state=='analyzed' and state2=='cached'
 
 def test_synthetic_evaluation_quality():
-    results=evaluate(); assert results['jobs_evaluated']==12 and results['section']['hard_eligibility_violations']==0
+    results=evaluate(); assert results['jobs_evaluated']>=50 and results['section']['hard_eligibility_violations']==0
     assert results['section']['ndcg_at_10'] >= results['baseline']['ndcg_at_10']
 
 def test_v5_migration_preserves_rows_and_backup(tmp_path,record):
@@ -77,5 +77,5 @@ def test_v5_migration_preserves_rows_and_backup(tmp_path,record):
     from job_agent.service import JobService
     path=tmp_path/'state.sqlite3'; service=JobService(Database(path)); service.import_rows([record]); service.set_status(service.list_jobs()[0]['id'],Status.SHORTLISTED)
     before=sqlite3.connect(path).execute('select count(*) from jobs').fetchone()[0]
-    assert sqlite3.connect(path).execute('pragma user_version').fetchone()[0]==5 and before==1
+    assert sqlite3.connect(path).execute('pragma user_version').fetchone()[0]==6 and before==1
     assert path.with_suffix('.sqlite3.pre-v5.bak').exists()

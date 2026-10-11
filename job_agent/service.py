@@ -7,9 +7,10 @@ from pydantic import ValidationError
 
 from .database import Database, now
 from .matching import DeterministicMatcher
-from .models import JobInput, Profile, Status, key
+from .models import JobInput, Profile, Status, clean, key
 from .candidate import CandidateProfile, SearchBackground
 from .intelligence import RecommendationEngine
+from .resume_review import FactDecision,EXTRACTOR_VERSION,extract,propose
 from .classification import rank
 from .freshness import WINDOWS, normalize_skills
 from .freshness import discovery_priority, location_bucket, utc_timestamp
@@ -79,6 +80,34 @@ class JobService:
             conn.execute("UPDATE candidate_profiles_v2 SET resume_name=?,resume_hash=?,resume_reviewed=0,updated_at=? WHERE id=1",("resume."+extension,hashed,now()))
             self.db.audit(conn,"RESUME_REFERENCED",{"format":extension,"bytes":len(payload)})
         return {"resume_attached":True,"resume_reviewed":False,"content_hash":hashed}
+
+    def parse_resume(self):
+        with self.db.transaction() as conn: row=conn.execute("SELECT resume_hash,resume_name FROM candidate_profiles_v2 WHERE id=1").fetchone()
+        if not row or not row["resume_hash"]:raise ValueError("resume_not_attached")
+        extension=Path(row["resume_name"]).suffix; path=self.db.path.parent/"resumes"/(row["resume_hash"]+extension)
+        sections=extract(path); extraction_id=digest([row["resume_hash"],EXTRACTOR_VERSION]); text_path=self.db.path.parent/"resume-extractions"/(extraction_id+".txt");text_path.parent.mkdir(exist_ok=True)
+        text_path.write_text("\n".join(f"[{ref}] {text}" for ref,text in sections),encoding="utf-8")
+        facts=propose(sections)
+        for fact in facts:fact["id"]=digest([extraction_id,fact["category"],fact["value"],fact["source_ref"]])
+        with self.db.transaction() as conn:
+            conn.execute("INSERT OR REPLACE INTO resume_extractions VALUES (?,?,?,?,?,?,?)",(extraction_id,row["resume_hash"],extension.lstrip('.'),EXTRACTOR_VERSION,now(),len(sections),str(text_path)))
+            for fact in facts:conn.execute("INSERT OR IGNORE INTO candidate_fact_proposals VALUES (?,?,?,?,?,?, 'PENDING',NULL,?,NULL)",(fact["id"],extraction_id,fact["category"],fact["value"],fact["source_ref"],fact["confidence"],now()))
+            self.db.audit(conn,"RESUME_PARSED",{"pages_or_paragraphs":len(sections),"proposals":len(facts),"extractor_version":EXTRACTOR_VERSION})
+        return {"extraction_id":extraction_id,"proposals":len(facts),"review_required":True}
+
+    def proposed_facts(self):
+        with self.db.transaction() as conn:return [dict(r) for r in conn.execute("SELECT id,category,value,source_ref,confidence,status,reviewed_value FROM candidate_fact_proposals ORDER BY created_at,id")]
+
+    def review_fact(self,proposal_id,decision:FactDecision):
+        with self.db.transaction() as conn:
+            row=conn.execute("SELECT * FROM candidate_fact_proposals WHERE id=?",(proposal_id,)).fetchone()
+            if not row or row["status"]!='PENDING':return False
+            value=clean(decision.reviewed_value or row["value"])
+            conn.execute("UPDATE candidate_fact_proposals SET status=?,reviewed_value=?,reviewed_at=? WHERE id=?",(decision.action,value if decision.action=='ACCEPTED' else None,now(),proposal_id))
+            conn.execute("INSERT INTO candidate_fact_audit(proposal_id,action,details,created_at) VALUES (?,?,?,?)",(proposal_id,decision.action,json.dumps({"edited":value!=row["value"]}),now()))
+            if decision.action=='ACCEPTED' and row["category"]=='SKILL_UNVERIFIED':
+                profile_row=conn.execute("SELECT config,version FROM candidate_profiles_v2 WHERE id=1").fetchone();profile=CandidateProfile.model_validate_json(profile_row["config"]);skills=sorted(set(profile.project_skills+[key(value)]));profile=profile.model_copy(update={"version":profile.version+1,"project_skills":skills});conn.execute("UPDATE candidate_profiles_v2 SET version=?,config=?,updated_at=? WHERE id=1",(profile.version,profile.model_dump_json(),now()))
+        return True
 
     def refresh_recommendations(self, top_k=250, strategy="section"):
         raw=self.get_candidate_profile(); raw.pop("resume_attached",None); raw.pop("resume_reviewed",None)

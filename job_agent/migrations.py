@@ -34,7 +34,10 @@ STATEMENTS = [
 
 def migrate(conn: sqlite3.Connection, path: Path):
     version = conn.execute("PRAGMA user_version").fetchone()[0]
+    if version == 6:
+        return
     if version == 5:
+        migrate_v6(conn, path)
         return
     if version == 4:
         migrate_v5(conn, path)
@@ -153,6 +156,22 @@ def migrate_v5(conn: sqlite3.Connection, path: Path):
         """)
         conn.execute("PRAGMA user_version=5")
         conn.commit()
+        migrate_v6(conn, path)
     except Exception:
         conn.rollback()
         raise
+
+def migrate_v6(conn: sqlite3.Connection, path: Path):
+    backup=path.with_suffix(path.suffix+".pre-v6.bak")
+    if not backup.exists():
+        with sqlite3.connect(backup) as target: conn.backup(target)
+    conn.commit();conn.execute("BEGIN IMMEDIATE")
+    try:
+        conn.executescript("""
+        CREATE TABLE resume_extractions(id TEXT PRIMARY KEY,resume_hash TEXT NOT NULL,format TEXT NOT NULL,extractor_version TEXT NOT NULL,created_at TEXT NOT NULL,page_count INTEGER NOT NULL,text_path TEXT NOT NULL);
+        CREATE TABLE candidate_fact_proposals(id TEXT PRIMARY KEY,extraction_id TEXT NOT NULL REFERENCES resume_extractions(id),category TEXT NOT NULL,value TEXT NOT NULL,source_ref TEXT NOT NULL,confidence TEXT NOT NULL,status TEXT NOT NULL CHECK(status IN ('PENDING','ACCEPTED','REJECTED')),reviewed_value TEXT,created_at TEXT NOT NULL,reviewed_at TEXT);
+        CREATE TABLE candidate_fact_audit(id INTEGER PRIMARY KEY,proposal_id TEXT NOT NULL,action TEXT NOT NULL,details TEXT NOT NULL,created_at TEXT NOT NULL);
+        CREATE TRIGGER fact_audit_no_update BEFORE UPDATE ON candidate_fact_audit BEGIN SELECT RAISE(ABORT,'append_only'); END;
+        CREATE TRIGGER fact_audit_no_delete BEFORE DELETE ON candidate_fact_audit BEGIN SELECT RAISE(ABORT,'append_only'); END;
+        """);conn.execute("PRAGMA user_version=6");conn.commit()
+    except Exception:conn.rollback();raise

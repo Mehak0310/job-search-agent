@@ -1,31 +1,35 @@
 {
   "baseline": {
-    "precision_at_5": 0.4,
-    "precision_at_10": 0.7,
-    "recall_at_10": 1.0,
-    "ndcg_at_10": 0.706,
-    "hard_eligibility_violations": 3
+    "precision_at_5": 0.0,
+    "precision_at_10": 0.5,
+    "recall_at_10": 0.143,
+    "ndcg_at_10": 0.351,
+    "hard_eligibility_violations": 5
   },
   "whole": {
     "precision_at_5": 1.0,
-    "precision_at_10": 0.7,
-    "recall_at_10": 1.0,
+    "precision_at_10": 1.0,
+    "recall_at_10": 0.286,
     "ndcg_at_10": 1.0,
     "hard_eligibility_violations": 0,
-    "cache_hit_rate": 0.429,
+    "cache_hit_rate": 0.486,
     "llm_calls": 0,
     "explanation_grounding": 1.0
   },
   "section": {
     "precision_at_5": 1.0,
-    "precision_at_10": 0.7,
-    "recall_at_10": 1.0,
+    "precision_at_10": 1.0,
+    "recall_at_10": 0.286,
     "ndcg_at_10": 1.0,
     "hard_eligibility_violations": 0,
-    "cache_hit_rate": 0.429,
+    "cache_hit_rate": 0.486,
     "llm_calls": 0,
     "explanation_grounding": 1.0
   },
   "default_strategy": "section",
-  "jobs_evaluated": 12
+  "jobs_evaluated": 60,
+  "split": {
+    "tuning": 24,
+    "held_out": 36
+  }
 }

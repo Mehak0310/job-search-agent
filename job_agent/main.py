@@ -14,6 +14,7 @@ from .connectors import FileConnector, ImportProblem, MAX_BYTES
 from .database import Database
 from .models import Profile, Status, StatusChange, WorkMode
 from .candidate import CandidateProfile
+from .resume_review import FactDecision
 from .service import JobService
 from .candidate import SearchBackground
 from .discovery import Discovery, RunBusy
@@ -139,6 +140,19 @@ def create_app(db_path: str | Path = "data/jobs.sqlite3", discovery_config: Disc
         await file.close()
         try:return service.attach_resume(payload,extension)
         except ValueError:raise HTTPException(422,"invalid_resume") from None
+
+    @app.post("/api/candidate-profile/resume/parse")
+    def parse_resume():
+        try:return service.parse_resume()
+        except ValueError as error:raise HTTPException(422,str(error)) from None
+
+    @app.get("/api/candidate-profile/facts")
+    def proposed_facts():return service.proposed_facts()
+
+    @app.patch("/api/candidate-profile/facts/{proposal_id}")
+    def review_fact(proposal_id:str,decision:FactDecision):
+        if not service.review_fact(proposal_id,decision):raise HTTPException(404,"proposal_not_found")
+        return {"status":decision.action}
 
     @app.post("/api/recommendations/refresh")
     def refresh_recommendations(top_k:int=Query(default=250,ge=1,le=1000),strategy:Literal["whole","section"]="section"):

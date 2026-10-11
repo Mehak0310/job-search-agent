@@ -46,6 +46,16 @@ class LocalEmbeddingProvider:
     def embed_batch(self, texts: list[str]) -> list[list[float]]:
         return [embed(text) for text in texts]
 
+class SentenceTransformerProvider:
+    """Optional trained local provider; loading never downloads unless the operator opts in."""
+    def __init__(self,model_id="sentence-transformers/all-MiniLM-L6-v2",revision="local-cache",local_files_only=True):
+        self.model_id=model_id;self.version=revision
+        from sentence_transformers import SentenceTransformer
+        self.model=SentenceTransformer(model_id,revision=None if revision=="local-cache" else revision,local_files_only=local_files_only)
+    def embed_batch(self,texts):
+        vectors=self.model.encode(texts,normalize_embeddings=True)
+        return [list(map(float,row)) for row in vectors]
+
 def gate(job: dict, profile) -> tuple[str, list[str]]:
     reasons=[]
     if job.get("eligibility_state") == "INELIGIBLE": reasons.append("Confirmed unavailable to candidates working from India")

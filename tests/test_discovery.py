@@ -286,7 +286,7 @@ def test_migration_backup_preserves_v1_and_reopen(tmp_path):
     with sqlite3.connect(path.with_suffix(".sqlite3.pre-v2.bak")) as backup:
         assert backup.execute("PRAGMA user_version").fetchone()[0] == 1
     with db.transaction() as conn:
-        assert conn.execute("PRAGMA user_version").fetchone()[0] == 5
+        assert conn.execute("PRAGMA user_version").fetchone()[0] == 6
     Database(path)
 
 
