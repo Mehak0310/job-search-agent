@@ -1,0 +1,64 @@
+{
+  "milestone": "M2B",
+  "status": "passed",
+  "changed_files": [
+    "job_agent/candidate.py",
+    "job_agent/evaluation.py",
+    "job_agent/intelligence.py",
+    "job_agent/llm.py",
+    "job_agent/main.py",
+    "job_agent/migrations.py",
+    "job_agent/service.py",
+    "job_agent/static/app.js",
+    "job_agent/static/index.html",
+    "job_agent/static/style.css",
+    "tests/test_m2b.py",
+    "scripts/evaluate_m2b.py",
+    "scripts/verify_m2b_browser.py",
+    "specs/m2b-requirements.md",
+    "specs/m2b-design.md",
+    "specs/m2b-tasks.md",
+    "docs/m2b-architecture.md",
+    "docs/m2b-evaluation.md",
+    "docs/m2b-interview-guide.md",
+    "README.md",
+    "tests/test_discovery.py",
+    "artifacts/m2b-evaluation.json",
+    "artifacts/browser-qa-m2b/report.json",
+    "artifacts/browser-qa-m2b/recommendations-mobile.png",
+    "artifacts/milestone-summary.json"
+  ],
+  "test_results": {
+    "python": "199 passed",
+    "dependency_check": "pip check passed",
+    "javascript_syntax": "passed"
+  },
+  "coverage": 99.28,
+  "browser_qa": {
+    "status": "passed",
+    "scenarios": "6/6",
+    "synthetic_only": true
+  },
+  "evaluation_metrics": {
+    "jobs": 12,
+    "baseline_precision_at_5": 0.4,
+    "hybrid_precision_at_5": 1.0,
+    "baseline_ndcg_at_10": 0.706,
+    "hybrid_ndcg_at_10": 1.0,
+    "baseline_hard_gate_violations": 3,
+    "hybrid_hard_gate_violations": 0,
+    "llm_calls": 0
+  },
+  "security_findings": [
+    "Resume bytes remain in ignored local data and are not parsed or modified automatically.",
+    "Job text is treated as untrusted data and cannot override hard gates.",
+    "Ollama is loopback-only and optional with zero default request budget.",
+    "No account, submission, scheduling, paid API or external model action occurred."
+  ],
+  "outstanding_issues": [
+    "Candidate profile facts remain marked unreviewed until the user confirms them against the actual resume.",
+    "The bundled hash embedding is deterministic and offline but less semantic than a trained local model.",
+    "Evaluation uses a small synthetic dataset and does not estimate hiring probability."
+  ],
+  "commit_sha": null
+}

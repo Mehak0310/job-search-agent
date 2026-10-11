@@ -1,0 +1,16 @@
+.venv/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.coverage
+coverage.xml
+htmlcov/
+data/
+.env
+.env.*
+*.log
+local-profile*.json
+*.egg-info/
+
+# Local browser QA screenshots and reports may include discovered listings.
+artifacts/browser-qa*/
