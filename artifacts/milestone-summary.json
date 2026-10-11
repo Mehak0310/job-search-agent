@@ -1,64 +1,69 @@
 {
-  "milestone": "M2B",
-  "status": "passed",
+  "milestone": "M2C",
+  "status": "passed_with_documented_limitation",
   "changed_files": [
-    "job_agent/candidate.py",
+    "AGENTS.md",
+    "artifacts/m2b-evaluation.json",
+    "artifacts/m2c-evaluation.json",
+    "artifacts/milestone-summary.json",
+    "docs/handoff.md",
+    "docs/project-status.md",
+    "docs/publication-checklist.md",
     "job_agent/evaluation.py",
     "job_agent/intelligence.py",
-    "job_agent/llm.py",
     "job_agent/main.py",
     "job_agent/migrations.py",
+    "job_agent/resume_review.py",
     "job_agent/service.py",
     "job_agent/static/app.js",
     "job_agent/static/index.html",
-    "job_agent/static/style.css",
-    "tests/test_m2b.py",
+    "requirements.lock.txt",
     "scripts/evaluate_m2b.py",
     "scripts/verify_m2b_browser.py",
-    "specs/m2b-requirements.md",
-    "specs/m2b-design.md",
-    "specs/m2b-tasks.md",
-    "docs/m2b-architecture.md",
-    "docs/m2b-evaluation.md",
-    "docs/m2b-interview-guide.md",
-    "README.md",
+    "specs/m2c.md",
     "tests/test_discovery.py",
-    "artifacts/m2b-evaluation.json",
-    "artifacts/browser-qa-m2b/report.json",
-    "artifacts/browser-qa-m2b/recommendations-mobile.png",
-    "artifacts/milestone-summary.json"
+    "tests/test_m2b.py",
+    "tests/test_m2c.py"
   ],
   "test_results": {
-    "python": "199 passed",
+    "python": "203 passed, 1 dependency deprecation warning",
     "dependency_check": "pip check passed",
-    "javascript_syntax": "passed"
+    "javascript_syntax": "passed",
+    "database_migration": "schema v5 to v6 passed with backup and integrity checks"
   },
-  "coverage": 99.28,
+  "coverage": 98.74,
   "browser_qa": {
     "status": "passed",
-    "scenarios": "6/6",
-    "synthetic_only": true
+    "scenarios": "7/7",
+    "synthetic_only": true,
+    "tracked_screenshots": false
   },
   "evaluation_metrics": {
-    "jobs": 12,
-    "baseline_precision_at_5": 0.4,
-    "hybrid_precision_at_5": 1.0,
-    "baseline_ndcg_at_10": 0.706,
-    "hybrid_ndcg_at_10": 1.0,
-    "baseline_hard_gate_violations": 3,
-    "hybrid_hard_gate_violations": 0,
+    "jobs": 60,
+    "tuning_jobs": 24,
+    "held_out_jobs": 36,
+    "held_out_baseline_precision_at_5": 0.4,
+    "held_out_section_precision_at_5": 1.0,
+    "held_out_baseline_ndcg_at_10": 0.322,
+    "held_out_section_ndcg_at_10": 1.0,
+    "held_out_baseline_hard_gate_violations": 6,
+    "held_out_section_hard_gate_violations": 0,
+    "held_out_section_explanation_grounding": 1.0,
+    "warm_cache_hit_rate": 1.0,
     "llm_calls": 0
   },
   "security_findings": [
-    "Resume bytes remain in ignored local data and are not parsed or modified automatically.",
-    "Job text is treated as untrusted data and cannot override hard gates.",
-    "Ollama is loopback-only and optional with zero default request budget.",
-    "No account, submission, scheduling, paid API or external model action occurred."
+    "Resume parsing is explicit, local, bounded and review-only; attaching a document does not parse it.",
+    "No candidate facts were accepted for the user during implementation.",
+    "Original local documents and application data remain in ignored storage and were not staged.",
+    "The staged-file audit found no private documents, databases, runtime artifacts, credentials or personal local paths.",
+    "No account access, submission, scheduling, paid API, remote inference or public visibility was used."
   ],
   "outstanding_issues": [
-    "Candidate profile facts remain marked unreviewed until the user confirms them against the actual resume.",
-    "The bundled hash embedding is deterministic and offline but less semantic than a trained local model.",
-    "Evaluation uses a small synthetic dataset and does not estimate hiring probability."
+    "Actual resume fact proposals require explicit user review before they can affect the candidate profile.",
+    "The optional trained embedding provider could not be benchmarked because its runtime and model are not installed locally; no model download was authorized.",
+    "The synthetic evaluation measures ranking behavior and does not estimate hiring probability."
   ],
+  "implementation_commit_sha": "097e33a13e8e4493768fc707d649f9238af905cc",
   "commit_sha": null
 }
