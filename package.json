@@ -1,0 +1,33 @@
+{
+  "name": "job-search-agent",
+  "version": "1.0.0",
+  "description": "The dashboard now includes a versioned candidate profile, deterministic hard eligibility gates, cached offline semantic matching, explainable hybrid rankings and an optional zero-budget-by-default LLM adapter. Employment skills, AI project skills and learning skills remain separate; no professional AI tenure is inferred. A PDF/DOCX resume can be referenced locally under ignored `data/resumes/`, but it is never automatically edited or treated as verified facts.",
+  "main": "index.js",
+  "directories": {
+    "doc": "docs",
+    "test": "tests"
+  },
+  "scripts": {
+    "test:e2e": "playwright test --config=playwright.privacy.config.ts",
+    "test:e2e:r1": "playwright test --config=playwright.r1.config.ts",
+    "test:e2e:r2": "playwright test --config=playwright.r2.config.ts",
+    "test:e2e:ui": "playwright test --ui",
+    "test:e2e:headed": "playwright test --headed",
+    "test:e2e:record": "playwright codegen http://127.0.0.1:8000/"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Mehak0310/job-search-agent.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "bugs": {
+    "url": "https://github.com/Mehak0310/job-search-agent/issues"
+  },
+  "homepage": "https://github.com/Mehak0310/job-search-agent#readme",
+  "devDependencies": {
+    "@playwright/test": "^1.64.1",
+    "@types/node": "^26.6.5"
+  }
+}

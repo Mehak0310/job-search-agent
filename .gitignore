@@ -14,3 +14,63 @@ local-profile*.json
 
 # Local browser QA screenshots and reports may include discovered listings.
 artifacts/browser-qa*/
+
+# Playwright
+node_modules/
+/test-results/
+/playwright-report/
+/blob-report/
+/playwright/.cache/
+/playwright/.auth/
+
+# Isolated reliability browser artifacts
+/test-results-r1/
+/playwright-report-r1/
+/test-results-r2/
+/playwright-report-r2/
+
+# Local distribution archives (preserve locally; never publish)
+/artifacts.zip
+/artifacts/command-center-proposal.zip
+
+# Disposable privacy regression output
+/test-results-privacy/
+/playwright-report-privacy/
+
+# Private historical operational reports and personal one-shot tools
+/docs/audit-defect-register.md
+/docs/autonomous-orchestration.md
+/docs/draft-policy-and-opportunities.md
+/docs/m4-runbook.md
+/docs/orchestration-continuation.md
+/docs/preparation-review-update.md
+/docs/priority-employer-research.md
+/docs/public-discovery-interface-research.md
+/docs/r1-implementation-report.md
+/docs/r1-mandatory-completeness.md
+/docs/r2-implementation-report.md
+/docs/r3-final-verification.md
+/docs/release-step1-results.md
+/docs/source-coverage-expansion.md
+/docs/spa-workflow-update.md
+/docs/step1-continuation.md
+/docs/ui-interaction-coverage.md
+/docs/ui-testing.md
+/docs/command-center-acceptance.md
+/scripts/cache_step1_mail.py
+/scripts/fill_gitlab_saved_answers.py
+/scripts/inspect_gitlab_portal.py
+/scripts/prepare_gitlab_portal.py
+/scripts/prepare_step1_review.py
+/scripts/repair_gitlab_upload.py
+/scripts/replay_step1_mail.py
+/scripts/verify_spa_browser.py
+/scripts/verify_step1_browser.py
+/scripts/verify_step1_state.py
+/scripts/verify_packet_cards.py
+/scripts/verify_r1_activation.py
+/scripts/verify_r2_activation.py
+
+# Historical operational evidence embedded in old specifications
+/specs/m4.md
+/specs/release-step1.md

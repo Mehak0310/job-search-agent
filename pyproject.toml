@@ -7,11 +7,14 @@ name = "local-job-agent"
 version = "0.4.0"
 description = "Local-first job research and manual application tracker"
 requires-python = ">=3.12"
-dependencies = ["fastapi>=0.115,<1", "pydantic>=2.9,<3", "uvicorn>=0.30,<1", "python-multipart>=0.0.18,<1", "httpx>=0.27,<1"]
+dependencies = ["fastapi>=0.115,<1", "pydantic>=2.9,<3", "uvicorn>=0.54,<1", "python-multipart>=0.0.18,<1", "httpx>=0.27,<1"]
 
 [project.optional-dependencies]
 test = ["pytest>=8,<10", "pytest-cov>=6,<8", "httpx>=0.27,<1"]
 browser = ["playwright>=1.55,<2"]
+embeddings = ["sentence-transformers==3.4.1"]
+export = ["openpyxl==3.1.5"]
+gmail = ["google-api-python-client>=2,<3", "google-auth-oauthlib>=1,<2"]
 
 [tool.setuptools.packages.find]
 include = ["job_agent*"]
@@ -22,3 +25,7 @@ job_agent = ["static/*"]
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 addopts = "--cov=job_agent --cov-report=term-missing --cov-report=xml --cov-fail-under=90"
+
+[tool.coverage.run]
+# Playwright sync switches greenlets; retain thread tracing for the API workers.
+concurrency = ["thread", "greenlet"]

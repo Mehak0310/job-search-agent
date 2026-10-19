@@ -34,7 +34,7 @@ class DeterministicMatcher:
         else:
             missing.append("Job skills not supplied")
         location = key(job.location)
-        if any(place in location for place in profile.locations):
+        if any(place in location for place in profile.locations) or job.work_mode==WorkMode.REMOTE and "india" in location and "remote india" in profile.locations:
             score += 15
             reasons.append("Location matches preferences")
         else:
@@ -53,7 +53,7 @@ class DeterministicMatcher:
         elif job.min_experience is not None and profile.experience_years < job.min_experience:
             disqualifiers.append("Below stated minimum experience")
         elif job.max_experience is not None and profile.experience_years > job.max_experience:
-            disqualifiers.append("Above stated experience range")
+            missing.append("Candidate experience exceeds stated range; review role level")
         else:
             score += 5
             reasons.append("Experience fits stated range")

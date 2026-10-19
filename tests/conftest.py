@@ -19,7 +19,10 @@ def record():
 
 @pytest.fixture
 def app(tmp_path):
-    return create_app(tmp_path / "state.sqlite3")
+    application=create_app(tmp_path / 'state.sqlite3')
+    from tests.synthetic_profile import seed
+    seed(application.state.service.db)
+    return application
 
 
 @pytest.fixture

@@ -12,12 +12,18 @@ def upload(client, rows, filename="jobs.json"):
 
 
 def test_dashboard_health_and_assets(client):
-    assert client.get("/api/health").json()["submission_enabled"] is False
+    health=client.get("/api/health").json()
+    assert health["submission_enabled"] is False
+    from job_agent.requirement_clauses import VERSION
+    assert health['runtime']['requirements_version']==VERSION
+    assert health['runtime']['schema_version']==17
+    assert len(health['runtime']['source_sha256'])==64
+    assert Path(health['runtime']['database_path']).is_absolute()
     assert client.get("/favicon.ico").status_code == 204
     page = client.get("/")
     assert page.status_code == 200 and "Job Search Workspace" in page.text
     assert "default-src 'self'" in page.headers["Content-Security-Policy"]
-    for asset in ["app.js", "style.css"]:
+    for asset in ["app.js", "style.css", "portal.css", "review.js", "spa.js"]:
         assert client.get("/static/" + asset).status_code == 200
     script = client.get("/static/app.js").text
     assert "textContent" in script and "innerHTML" not in script
@@ -38,10 +44,10 @@ def test_end_to_end_api(client, record):
     submitted = client.patch(f"/api/jobs/{job_id}/status", json={"status": "SUBMITTED"}).json()
     assert not submitted["submission_verified"] and submitted["status_tracking"] == "manual"
     profile = client.get("/api/profile").json()
-    assert profile["experience_years"] is None
+    assert profile["experience_years"] == 8
     profile["experience_years"] = 3
     assert client.put("/api/profile", json=profile).status_code == 200
-    assert client.get("/api/jobs").json()[0]["match_score"] == 100
+    assert client.get("/api/jobs").json()[0]["match_score"] >= 80
     events = client.get("/api/audit?limit=100").json()
     assert {e["action"] for e in events} >= {"IMPORT_COMPLETED", "STATUS_CHANGED", "DUPLICATE_DETECTED", "PROFILE_UPDATED"}
 

@@ -33,8 +33,8 @@ def _metrics(ranked):
     dcg=sum((2**item["label"]-1)/math.log2(i+2) for i,item in enumerate(ranked[:10])); ideal=sorted(ranked,key=lambda x:x["label"],reverse=True); idcg=sum((2**item["label"]-1)/math.log2(i+2) for i,item in enumerate(ideal[:10]))
     return {"precision_at_5":round(precision(5),3),"precision_at_10":round(precision(10),3),"recall_at_10":round(recall,3),"ndcg_at_10":round(dcg/idcg,3),"hard_eligibility_violations":sum(item["gate_state"]=="EXCLUDED" for item in ranked[:10])}
 
-def _evaluate(items):
-    profile=CandidateProfile(reviewed=True); db=MemoryDB(); engine=RecommendationEngine(None)
+def _evaluate(items, provider=None):
+    profile=CandidateProfile(reviewed=True); db=MemoryDB(); engine=RecommendationEngine(None,provider=provider)
     results={}
     baseline=sorted([dict(item,score=item["match_score"],gate_state="EXCLUDED" if item["eligibility_state"]=="INELIGIBLE" or item["required_experience_min"]>9 or "commission only" in item["description"].lower() else "NONE") for item in items],key=lambda x:x["score"],reverse=True); results["baseline"]=_metrics(baseline)
     for strategy in ("whole","section"):
@@ -49,8 +49,8 @@ def _evaluate(items):
     results["jobs_evaluated"]=len(items)
     return results
 
-def evaluate():
-    results=_evaluate(DATASET)
+def evaluate(provider=None):
+    results=_evaluate(DATASET,provider)
     results["split"]={"tuning":sum(x["split"]=="tuning" for x in DATASET),"held_out":sum(x["split"]=="held_out" for x in DATASET)}
-    results["held_out"]=_evaluate([x for x in DATASET if x["split"]=="held_out"])
+    results["held_out"]=_evaluate([x for x in DATASET if x["split"]=="held_out"],provider)
     return results

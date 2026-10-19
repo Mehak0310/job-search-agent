@@ -101,15 +101,15 @@ def test_record_rejection_and_source_partial(system):
     assert "private" not in str(JobService(discovery.db).audit_events(100))
 
 
-def test_ambiguous_same_source_and_cross_source_conflict(system):
+def test_same_url_aliases_preserve_provenance_without_rejection(system):
     discovery, state = system
     run(discovery)
     state["gh"] = state["gh"] | {"id": 124}
     result = run(discovery)
-    assert result["metrics"]["rejected_records"] == 1 and len(JobService(discovery.db).list_jobs()) == 1
+    assert result["metrics"]["rejected_records"] == 0 and result["metrics"]["duplicates"]==1 and len(JobService(discovery.db).list_jobs()) == 1
     state["lever"] = state["lever"] | {"descriptionPlain": "Different requirements and Python"}
     result = run(discovery)
-    assert result["metrics"]["rejected_records"] == 2 and result["metrics"]["duplicates"] == 0
+    assert result["metrics"]["rejected_records"] == 0
 
 
 def test_seen_timestamps_and_metadata_only_change(system):
@@ -231,7 +231,7 @@ def test_background_api_nonblocking_and_overlap(tmp_path, greenhouse_record):
         assert client.patch("/api/sources/gh", json={"enabled": False}).status_code == 200
         assert client.patch("/api/sources/missing", json={"enabled": True}).status_code == 404
         assert client.get("/api/discovery/runs/missing").status_code == 404
-        assert client.get("/api/search-background").json()["total_years"] == 7
+        assert client.get("/api/search-background").json()["total_years"] == 0
         assert client.put("/api/search-background", json={"total_years": 6, "backend_years": 3}).status_code == 200
         assert client.post("/api/sources", json={"id": "other", "provider": "lever", "company": "Other", "board": "other"}).status_code == 200
         assert client.post("/api/sources", json={"id": "gh", "provider": "greenhouse", "company": "Other", "board": "other"}).status_code == 409
@@ -286,7 +286,7 @@ def test_migration_backup_preserves_v1_and_reopen(tmp_path):
     with sqlite3.connect(path.with_suffix(".sqlite3.pre-v2.bak")) as backup:
         assert backup.execute("PRAGMA user_version").fetchone()[0] == 1
     with db.transaction() as conn:
-        assert conn.execute("PRAGMA user_version").fetchone()[0] == 6
+        assert conn.execute("PRAGMA user_version").fetchone()[0] == 17
     Database(path)
 
 

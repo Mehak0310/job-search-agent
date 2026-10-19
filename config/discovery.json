@@ -360,6 +360,44 @@
       "verification_evidence": "Official documented public RSS feed returned HTTP 200 and valid RSS. Attribution is retained.",
       "india_relevant": null,
       "cooldown_seconds": 3600
+    },
+    {
+      "id": "nagarro-smartrecruiters",
+      "provider": "smartrecruiters",
+      "company": "Nagarro",
+      "board": "Nagarro1",
+      "enabled": true,
+      "career_url": "https://careers.smartrecruiters.com/Nagarro1",
+      "verified": true,
+      "verification_evidence": "Local live public India traversal completed: Nagarro 446 postings / 5 pages; ServiceNow 77 postings / 1 page; no rejected records.",
+      "india_relevant": true,
+      "cooldown_seconds": 3600,
+      "verified_at": "2026-10-15T18:31:56Z"
+    },
+    {
+      "id": "servicenow-smartrecruiters",
+      "provider": "smartrecruiters",
+      "company": "ServiceNow",
+      "board": "ServiceNow",
+      "enabled": true,
+      "career_url": "https://careers.smartrecruiters.com/ServiceNow",
+      "verified": true,
+      "verification_evidence": "Local live public India traversal completed: Nagarro 446 postings / 5 pages; ServiceNow 77 postings / 1 page; no rejected records.",
+      "india_relevant": true,
+      "cooldown_seconds": 3600,
+      "verified_at": "2026-10-15T18:31:56Z"
+    },
+    {
+      "id": "amazon-public",
+      "provider": "amazon",
+      "company": "Amazon",
+      "board": "india",
+      "enabled": false,
+      "career_url": "https://www.amazon.jobs/en/search",
+      "verified": false,
+      "verification_evidence": "Public search UI/IND facet observed; first traversal hit a parser defect after 2200 records with zero committed. Parser repaired in fixtures. Disabled pending confirmation of supported automated use; linked terms could not be retrieved (403/503). No cooldown override.",
+      "india_relevant": true,
+      "cooldown_seconds": 3600
     }
   ]
 }

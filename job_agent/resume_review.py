@@ -1,10 +1,11 @@
 """Explicit local resume extraction. Resume text is untrusted data, never instructions."""
-import hashlib,re,uuid
+import hashlib,re,uuid,zipfile
+import xml.etree.ElementTree as ET
 from pathlib import Path
 from pydantic import Field
 from .models import StrictModel,clean,key
 
-EXTRACTOR_VERSION="1"
+EXTRACTOR_VERSION="2"
 SKILLS=("angular","react","javascript","typescript",".net","sql","python","fastapi","rag","faiss","embeddings","ollama","data science","machine learning")
 
 class FactDecision(StrictModel):
@@ -20,10 +21,17 @@ def extract(path:Path):
         if len(reader.pages)>30:raise ValueError("resume_page_limit")
         sections=[(f"page {i}",page.extract_text() or "") for i,page in enumerate(reader.pages,1)]
     elif path.suffix.lower()==".docx":
-        from docx import Document
-        paragraphs=Document(path).paragraphs
-        if len(paragraphs)>1000:raise ValueError("resume_paragraph_limit")
-        sections=[(f"paragraph {i}",p.text) for i,p in enumerate(paragraphs,1) if p.text.strip()]
+        sections=[]
+        with zipfile.ZipFile(path) as archive:
+            names=[name for name in archive.namelist() if name=="word/document.xml" or re.fullmatch(r"word/(?:header|footer)\d+\.xml",name)]
+            if sum(archive.getinfo(name).file_size for name in names)>3*1024*1024:raise ValueError("resume_xml_limit")
+            ns="{http://schemas.openxmlformats.org/wordprocessingml/2006/main}"
+            for name in names:
+                root=ET.fromstring(archive.read(name));label=Path(name).stem
+                for index,paragraph in enumerate(root.iter(ns+"p"),1):
+                    value="".join(node.text or "" for node in paragraph.iter(ns+"t")).strip()
+                    if value:sections.append((f"{label} block {index}",value))
+        if len(sections)>1500:raise ValueError("resume_paragraph_limit")
     else:raise ValueError("unsupported_resume")
     if sum(len(text) for _,text in sections)>200000:raise ValueError("resume_text_limit")
     return sections

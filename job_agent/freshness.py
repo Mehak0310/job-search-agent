@@ -38,7 +38,7 @@ def discovery_priority(score,eligibility,published_at,now=None):
     return round(score*.7 + freshness_weight(age_hours(published_at,now))*20 + {"ELIGIBLE":10,"UNKNOWN":3,"INELIGIBLE":0}[eligibility],3)
 
 def location_bucket(location,eligibility="UNKNOWN",work_mode="unknown"):
-    value=key(location)
+    value=key(location or '')
     if work_mode=="remote" and eligibility=="ELIGIBLE":return "REMOTE_INDIA"
     if re.search(r"\bgreater noida\b",value):return "GREATER_NOIDA"
     if re.search(r"\bnoida\b",value):return "NOIDA"

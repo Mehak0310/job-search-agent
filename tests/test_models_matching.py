@@ -56,8 +56,8 @@ def test_partial_skill_and_unknown_experience(record):
 def test_disqualifiers(record, years, phrase):
     match = DeterministicMatcher().evaluate(JobInput(**(record | {"location": "USA", "skills": ["RAG"], "work_mode": "onsite", "description": "unpaid"})), Profile(work_modes=[WorkMode.REMOTE], experience_years=years, exclusions=["unpaid"]))
     assert match["score"] == 0
-    assert len(match["potential_disqualifiers"]) == 4
-    assert any(phrase in item for item in match["potential_disqualifiers"])
+    if years==1:assert len(match["potential_disqualifiers"])==4 and any(phrase in item for item in match["potential_disqualifiers"])
+    else:assert len(match["potential_disqualifiers"])==3 and any("exceeds stated range" in item for item in match["missing_requirements"])
 
 
 def test_fingerprint_changes_for_every_material_field():

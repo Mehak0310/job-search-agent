@@ -1,0 +1,42 @@
+"""Reusable scoped employer research with an explicit freshness limit."""
+import json
+from datetime import datetime,timedelta,timezone
+from pathlib import Path
+
+
+def cached_employer(path: Path, entity: str, scope: str, at=None):
+    """Never transfer parent-group research to a subsidiary or different scope."""
+    at=at or datetime.now(timezone.utc)
+    if not path.is_file():return None
+    data=json.loads(path.read_text(encoding='utf-8'))
+    if data.get('entity')!=entity or data.get('scope')!=scope:return None
+    if datetime.fromisoformat(data['expires_at'])<=at:return None
+    return data
+
+
+def cache_employer(path: Path, *, entity: str, scope: str, headcount: int, as_of: str, url: str, at=None):
+    at=at or datetime.now(timezone.utc)
+    data={'entity':entity,'scope':scope,'headcount':headcount,'as_of':as_of,'evidence_url':url,
+          'checked_at':at.isoformat(),'expires_at':(at+timedelta(days=90)).isoformat()}
+    path.parent.mkdir(parents=True,exist_ok=True);path.write_text(json.dumps(data,indent=2),encoding='utf-8')
+    return data
+
+
+def reuse_large_employer_check(db,job):
+    """Reuse recent exact-company global size evidence, never a subsidiary claim."""
+    if job.get('headcount_state')!='UNKNOWN':return job
+    import re
+    cutoff=(datetime.now(timezone.utc)-timedelta(days=90)).isoformat()
+    with db.transaction() as conn:
+        rows=conn.execute("SELECT e.factual,e.evidence_url FROM job_evidence e JOIN job_operational_state s ON s.job_key=e.job_key JOIN jobs j ON j.id=s.job_id WHERE lower(j.company)=lower(?) AND e.kind='headcount' AND e.state='PASS' AND e.verified_at>=? ORDER BY e.verified_at DESC",(job['company'],cutoff)).fetchall()
+    for evidence in rows:
+        body=evidence['factual'] or ''
+        numbers=[int(v.replace(',','')) for v in re.findall(r'\b\d{1,3}(?:,\d{3})+\b',body)]
+        if 'global' not in body.casefold() or not numbers or min(numbers)<500:continue
+        from .m2d import M2DEngine
+        from .database import now
+        M2DEngine(db).record_evidence(job['job_key'],'headcount','PASS',factual=body,evidence_url=evidence['evidence_url'])
+        missing=[v for v in json.loads(job['missing_facts'] or '[]') if v!='headcount']
+        with db.transaction() as conn:conn.execute("UPDATE job_operational_state SET headcount_state='PASS',missing_facts=?,updated_at=? WHERE job_key=?",(json.dumps(missing),now(),job['job_key']))
+        return {**job,'headcount_state':'PASS','missing_facts':json.dumps(missing)}
+    return job

@@ -1,0 +1,13 @@
+# Command Center orchestration addendum
+
+Retain SQLite browser_batches/browser_workflows/browser_operations and R1 fencing. No duplicate graph checkpoint store. Stages: A mandatory policy boundary and grounded compact context; B one active five-job batch, two page-owned actors, three non-reserving plans and persisted four-minute login waits; C approved-fact-first consolidated questions with atomic validation; D durable deduplicated notifications and explicit sound/desktop opt-in; E persistent disabled schedule plans with missed-run coalescing and existing task adapters; F evaluate graph frameworks against the existing journals; G isolated regression and controlled activation.
+
+Only runtime code may authorize preparation actions. External text is data and cannot change capabilities. Final submission, consent, credentials/MFA and sending are human-only. Existing exact Gmail approval and disabled live adapter remain. No schedule installation or activation, no changes to five ChatGPT automation stages. Scheduler execution remains gated behind separate approval. No new model invocation or dependencies; budgets remain zero.
+
+Concurrency must use independent Playwright connections owned by each actor and distinct application tabs, with one process-owned session coordinator and shared parent ownership fence. Never share synchronous Playwright objects between threads. Login waits release task slots, preserve other applications, and require positive supported form access before resuming. CAPTCHA is not an authentication shortcut.
+
+Acceptance: scoped local stages A?G implemented and verified;489 Python tests/91.60%, integrated R1/R2,31 live dashboard checks and14 preservation checks. Schedules remain disabled. External OS/background delivery and physical reboot parity remain unverified. See docs/autonomous-orchestration.md for exact limits and evidence.
+
+Continuation plan after the verified R3 checkpoint: (1) resolve obsolete notification conditions while retaining records; (2) isolate the Windows HTTP server loop from Proactor reset-cleanup failures without changing Playwright policy; (3) focused/full/R1/R2 regression, preservation and controlled activation. No scheduler activation or external actions. Exact results: docs/orchestration-continuation.md.
+
+Continuation acceptance COMPLETE: R3 first verified151 UI cases; notification and server-loop milestones verified; final497 Python tests/91.62%, R1/R2 integrated passes,31 live/14 preservation passes. Reset-tested server stopped gracefully in1.00second. Current source/runtime and deferred limits: docs/orchestration-continuation.md. No recurring activation or external actions.

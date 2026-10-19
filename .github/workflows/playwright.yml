@@ -1,0 +1,40 @@
+name: Playwright Tests
+on:
+  push:
+    branches: [ main, master ]
+  pull_request:
+    branches: [ main, master ]
+jobs:
+  test:
+    timeout-minutes: 60
+    runs-on: windows-latest
+    steps:
+    - uses: actions/checkout@v4
+    - uses: actions/setup-node@v4
+      with:
+        node-version: lts/*
+    - uses: actions/setup-python@v5
+      with:
+        python-version: '3.12'
+    - name: Create isolated Python environment
+      run: python -m venv .venv
+    - name: Install Python application and test dependencies
+      run: .venv\Scripts\python.exe -m pip install -e ".[test,browser,export]" pypdf python-docx greenlet
+    - name: Install dependencies
+      run: npm ci
+    - name: Verify dependencies
+      run: .venv\Scripts\python.exe -m pip check
+    - name: Run Python regression
+      run: .venv\Scripts\python.exe -m pytest -q
+    - name: Run Playwright tests
+      run: npm run test:e2e
+    - name: Run isolated integrated R1 tests
+      run: npm run test:e2e:r1
+    - name: Run isolated integrated R2 tests
+      run: npm run test:e2e:r2
+    - uses: actions/upload-artifact@v4
+      if: ${{ !cancelled() }}
+      with:
+        name: playwright-report
+        path: playwright-report/
+        retention-days: 30

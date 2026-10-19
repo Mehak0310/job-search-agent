@@ -10,7 +10,7 @@ import httpx
 from job_agent.models import Status
 
 def test_candidate_profile_truth_and_validation():
-    profile=CandidateProfile(reviewed=True)
+    profile=__import__('tests.synthetic_profile',fromlist=['profile']).profile(reviewed=True)
     assert profile.ai_employment_years is None and "rag" in profile.project_skills
     with pytest.raises(ValidationError): CandidateProfile(target_roles={"invented":5})
     with pytest.raises(ValidationError): CandidateProfile(total_experience_years=2,ai_employment_years=3)
@@ -28,7 +28,7 @@ def test_hard_gates_are_explainable():
 
 def test_profile_resume_and_recommendation_api(client):
     profile=client.get('/api/candidate-profile').json(); assert profile['version']==1 and profile['ai_employment_years'] is None
-    profile={k:v for k,v in profile.items() if k not in {'resume_attached','resume_reviewed'}}; profile['reviewed']=True
+    profile={k:v for k,v in profile.items() if k in CandidateProfile.model_fields}; profile['reviewed']=True
     updated=client.put('/api/candidate-profile',json=profile).json(); assert updated['version']==2
     bad=client.post('/api/candidate-profile/resume',files={'file':('resume.pdf',b'not-pdf')}); assert bad.status_code==422
     good=client.post('/api/candidate-profile/resume',files={'file':('resume.pdf',b'%PDF-synthetic-resume')}).json(); assert good['resume_attached'] and not good['resume_reviewed']
@@ -77,5 +77,5 @@ def test_v5_migration_preserves_rows_and_backup(tmp_path,record):
     from job_agent.service import JobService
     path=tmp_path/'state.sqlite3'; service=JobService(Database(path)); service.import_rows([record]); service.set_status(service.list_jobs()[0]['id'],Status.SHORTLISTED)
     before=sqlite3.connect(path).execute('select count(*) from jobs').fetchone()[0]
-    assert sqlite3.connect(path).execute('pragma user_version').fetchone()[0]==6 and before==1
+    assert sqlite3.connect(path).execute('pragma user_version').fetchone()[0]==17 and before==1
     assert path.with_suffix('.sqlite3.pre-v5.bak').exists()

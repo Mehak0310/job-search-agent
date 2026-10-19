@@ -1,0 +1,60 @@
+import {test,expect} from '@playwright/test';
+test.afterAll(async({request})=>{await request.post('/__r1/shutdown').catch(()=>{});});
+
+test('R1 actual API and subprocess workers persist five outcomes, recover history and detect termination',async({page,context,request})=>{
+ const errors:string[]=[];page.on('pageerror',e=>errors.push(e.message));
+ // Real local API writes are allowed only to this disposable synthetic server.
+ await context.route(url=>['http:','https:'].includes(url.protocol)&&url.origin!=='http://127.0.0.1:8017',route=>route.abort());
+ await page.route('**/api/m2d/summary',route=>route.fulfill({status:503,json:{detail:'Synthetic Sources section failure'}}));
+ await page.goto('/#browser-panel');await expect(page.locator('#browser-progress')).not.toBeEmpty();
+ await expect(page.locator('#m2d-panel .section-error')).toContainText('Synthetic Sources');
+ await page.locator('#browser-batch').click();
+ await expect(page.locator('#browser-applications>.job')).toHaveCount(5);
+ await expect(page.locator('#browser-batch')).toBeDisabled();
+ const rows=async()=>await (await request.get('/api/browser/applications?include_history=true')).json();
+ await expect.poll(async()=>{const r=await rows();return r.some((a:any)=>a.completed_fields>0);}).toBe(true);
+ await expect.poll(async()=>{const p=await (await request.get('/api/browser/progress')).json();return p.work_active;},{timeout:60_000}).toBe(false);
+ const finished=await rows();
+ const priority=await (await request.get('/__r1/priority-evidence')).json();
+ expect(priority.queue.map((r:any)=>r.fit)).toEqual([99,90,85,80,75]);
+ expect(priority.queue.every((r:any)=>r.eligibility==='PASS')).toBe(true);
+ expect(priority.worker_selection.map((r:any)=>r.job_id)).toEqual(priority.queue.map((r:any)=>r.job_id));
+ expect(finished.map((a:any)=>a.state).sort()).toEqual(['READY_FOR_USER_REVIEW','NEEDS_USER_ANSWER','SESSION_LOST','ERROR','NEEDS_EMPLOYER_CHECK'].sort());
+ const ready=finished.find((a:any)=>a.state==='READY_FOR_USER_REVIEW');expect(ready.documents[0].verified).toBe(true);
+ const unanswered=finished.find((a:any)=>a.state==='NEEDS_USER_ANSWER');
+ const questions=await (await request.get('/api/browser/applications/'+unanswered.id+'/questions')).json();
+ expect(questions.some((q:any)=>q.label.startsWith('I confirm'))).toBe(false);
+ expect(questions.some((q:any)=>q.label.includes('B2B SaaS'))).toBe(true);
+ const progress=await (await request.get('/api/browser/progress')).json();const batch=progress.active_batch_id;
+ await page.reload();await expect(page.locator('#browser-progress')).toContainText('5 of 5');
+ const reopened=await context.newPage();await reopened.goto('/#browser-panel');
+ await expect(reopened.locator('#browser-applications>.job')).toHaveCount(5);
+ expect((await (await request.get('/api/browser/progress')).json()).active_batch_id).toBe(batch);
+ // Manual report is a real fixture API operation; no employer submission occurs.
+ await request.post('/api/browser/applications/'+ready.id+'/reported-submitted');
+ const lost=await request.post('/api/browser/applications/'+ready.id+'/switch');expect(lost.ok()).toBe(true);
+ await reopened.reload();await expect(reopened.locator('#browser-applications>.job')).toHaveCount(4);
+ await reopened.locator('.command-subnav').getByRole('link',{name:'Applied',exact:true}).click();
+ const reported=reopened.locator('#browser-applications>.job').filter({hasText:ready.title}).filter({hasText:ready.company});
+ await expect(reported).toContainText('Marked submitted manually');
+ const after=(await rows()).find((a:any)=>a.id===ready.id);expect(after.application_outcome).toBe('USER_REPORTED_SUBMITTED');expect(after.session_health).toBe('LOST');
+ const detail=await (await request.get('/api/jobs/'+ready.job_id)).json();expect(detail.application_outcome).toBe('USER_REPORTED_SUBMITTED');
+ const requirement=await (await request.post('/__r1/unsupported-requirement')).json();expect(requirement.requirement_state).toBe('UNKNOWN');
+ await reopened.getByRole('tab',{name:'Find Jobs',exact:true}).click();await reopened.reload();
+ await reopened.locator('.filter-disclosure').evaluate((e:HTMLDetailsElement)=>e.open=true);await reopened.locator('#clear-filters').click();
+ const unsupported=reopened.locator('#jobs>.job').filter({hasText:'R1 Unsupported Requirement'});
+ await expect(unsupported).toContainText('Unmapped potentially mandatory clause');
+ await expect(unsupported).toContainText('Only graduates are considered.');
+ expect((await (await request.get('/api/jobs/'+requirement.job_id)).json()).card.requirement_assessment.source_provenance.content_status).toBe('FULL');
+ // Start a second real fixture worker, terminate its process and await lease recovery.
+ await request.post('/__r1/hold-next');await page.reload();
+ await page.locator('#browser-batch').click();
+ await expect.poll(async()=>{const p=await (await request.get('/api/browser/progress')).json();return p.operations[0]?.state;}).toBe('RUNNING');
+ await request.post('/__r1/terminate-worker');
+ await expect.poll(async()=>{const p=await (await request.get('/api/browser/progress')).json();return p.operations[0]?.state;}).toBe('INTERRUPTED');
+ await page.reload();await expect(page.locator('#browser-progress')).toContainText('5 of 5');
+ await expect(page.locator('#browser-applications')).toContainText('Worker interrupted; progress preserved');
+ expect((await rows()).find((a:any)=>a.id===ready.id).application_outcome).toBe('USER_REPORTED_SUBMITTED');
+ const evidence=await (await request.get('/__r1/evidence')).json();expect(evidence.events).toBeGreaterThan(5);expect(evidence.drafts).toBe(0);expect(evidence.submitted_jobs).toBe(0);expect(errors).toEqual([]);
+ await reopened.close();
+});

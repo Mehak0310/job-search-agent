@@ -1,6 +1,6 @@
 import pytest
 
-from job_agent.candidate import SearchBackground
+from tests.synthetic_profile import background as SearchBackground
 from job_agent.classification import classify, extract_requirements, india_eligibility, rank
 from job_agent.models import JobInput, Profile, WorkMode
 

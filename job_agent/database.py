@@ -61,6 +61,12 @@ class Database:
             conn.execute("INSERT OR IGNORE INTO candidate_profile VALUES (1, ?, ?)", (Profile().model_dump_json(), now()))
         with self.transaction() as conn:
             migrate(conn, self.path)
+        from .fact_memory import schema
+        with self.transaction() as conn:schema(conn)
+        from .priority_queue import schema as priority_schema
+        with self.transaction() as conn:priority_schema(conn)
+        from .orchestration import schema as orchestration_schema
+        with self.transaction() as conn:orchestration_schema(conn)
 
     @contextmanager
     def transaction(self):

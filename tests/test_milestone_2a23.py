@@ -63,11 +63,12 @@ def test_pagination_combined_filters(client,record):
     for sort in ('newest','priority','updated'): assert client.get(base+'&sort='+sort).status_code==200
 
 def test_bounded_concurrent_fetch_serialized_writes(tmp_path):
-    lock=threading.Lock(); active=peak=0
+    lock=threading.Lock(); active=peak=0; paired=threading.Barrier(2)
     def handler(request):
         nonlocal active,peak
         board=request.url.path.split('/')[-2]
         with lock: active+=1; peak=max(peak,active)
+        paired.wait(timeout=5)  # Prove overlap without a machine-speed assumption.
         time.sleep(.08)
         with lock: active-=1
         job={"id":board,"title":"React Engineer","location":{"name":"India"},"absolute_url":f"https://example.com/{board}","content":"Requirements React required"}
@@ -76,4 +77,5 @@ def test_bounded_concurrent_fetch_serialized_writes(tmp_path):
     cfg=DiscoveryConfig(settings=DiscoverySettings(concurrency_limit=2,cooldown_seconds=0,retry_limit=0),sources=sources)
     db=Database(tmp_path/'c.db');Registry(db).sync(cfg);d=Discovery(db,cfg.settings,lambda:httpx.Client(transport=httpx.MockTransport(handler)))
     started=time.monotonic(); result=d.execute(d.claim()); elapsed=time.monotonic()-started; d.close()
-    assert result['metrics']['new_jobs']==4 and result['status']=='COMPLETED' and peak==2 and elapsed<.6
+    assert result['metrics']['new_jobs']==4 and result['status']=='COMPLETED' and peak==2
+    assert elapsed<10  # Bounded fixture, not a sub-second hardware benchmark.

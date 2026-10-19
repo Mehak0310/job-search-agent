@@ -109,6 +109,7 @@ class RecommendationEngine:
             if job_ids: query += " WHERE id IN ("+",".join("?"*len(job_ids))+")"; params=list(job_ids)
             rows=conn.execute(query+" ORDER BY match_score DESC,id LIMIT ?",params+[top_k]).fetchall()
             for row in rows:
+                if row['discovery_detail'] and json.loads(row['discovery_detail']).get('evidence',{}).get('metadata_only'):continue
                 job=dict(row); job["skills"]=json.loads(job["skills"]); job["required_skills"]=json.loads(job.get("required_skills") or "[]"); job["listing_kind"]="LIVE" if job.get("discovery_detail") else "SAMPLE" if job.get("is_sample") else "IMPORTED"; metrics["jobs_considered"]+=1
                 try: result=self.score(job,profile,strategy,conn,metrics)
                 except Exception: metrics["fallback_count"]+=1; state,hard=gate(job,profile); result={"score":float(job["match_score"]),"confidence":"LOW","gate_state":state,"semantic_score":None,"strategy":"deterministic_fallback","breakdown":{"legacy_match":job["match_score"]},"explanation":{"why":job.get("match_detail",{}),"matched_skills":[],"missing_or_uncertain":hard+["Embedding provider unavailable"],"evidence":[]},"ai_state":"unavailable","model_provenance":None}

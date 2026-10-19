@@ -35,6 +35,8 @@ class Discovery:
         self.executor = ThreadPoolExecutor(max_workers=1, thread_name_prefix="job-discovery")
 
     def claim(self) -> str:
+        from .policy_hooks import check
+        check('research_worker','DISCOVERY')
         run_id = uuid.uuid4().hex
         with self.db.transaction() as conn:
             conn.execute("BEGIN IMMEDIATE")
@@ -86,24 +88,34 @@ class Discovery:
             self.db.audit(conn, "DISCOVERY_FINISHED", {"run_id": run_id, "status": status, **totals})
 
     def execute(self, run_id):
+        from .policy_hooks import check
+        check('research_worker','DISCOVERY')
         started = time.monotonic()
         budget, totals, error = RequestBudget(self.settings), metrics(), None
+        partial_sources = False
         try:
             sources = [source for source in self.registry.list() if source["enabled"]]
-            background = self.registry.background()
-            profile = JobService(self.db)._profile
+            service = JobService(self.db)
             with self.db.transaction() as conn:
-                preferences = profile(conn)
+                candidate=service._candidate(conn);preferences=candidate.search_profile();background=candidate.search_background()
             with self.client_factory() as client:
                 prefetched = {}
-                eligible = [s for s in sources if not s["next_scan_after"] or s["next_scan_after"] <= now()]
+                fetch_bounds = {}
+                eligible = sorted((s for s in sources if not s["next_scan_after"] or s["next_scan_after"] <= now()), key=lambda s:(s["last_attempt"] or "", s["id"]))
                 def fetch(source):
                     local=metrics()
+                    fetch_bounds[source['id']]=(time.monotonic(),now())
                     try:
                         connector=CONNECTORS[source["provider"]]()
                         data={name:source[name] for name in SourceConfig.model_fields if name in source}; data["cooldown_seconds"]=source.get("source_cooldown_seconds")
                         config=SourceConfig(**data)
-                        return connector,config,connector.fetch(config,PublicReader(client,budget,local),source["checkpoint"]),local,None
+                        reader=PublicReader(client,budget,local)
+                        batch=connector.fetch(config,reader,source["checkpoint"])
+                        if hasattr(connector,'enrich'):
+                            with self.db.transaction() as conn:
+                                cached={row['source_key']:json.loads(row['snapshot']) for row in conn.execute('SELECT source_key,snapshot FROM source_references WHERE source=? AND snapshot IS NOT NULL',(source['id'],))}
+                            batch=connector.enrich(config,batch,reader,cached,preferences)
+                        return connector,config,batch,local,None
                     except Exception as failure:
                         return None,None,None,local,failure
                 with ThreadPoolExecutor(max_workers=self.settings.concurrency_limit,thread_name_prefix="source-fetch") as pool:
@@ -113,6 +125,8 @@ class Discovery:
                     local, status, code, checkpoint = metrics(), "SUCCESS", None, source["checkpoint"]
                     source_started = time.monotonic()
                     source_started_at = now()
+                    if source['id'] in fetch_bounds:
+                        source_started,source_started_at=fetch_bounds[source['id']]
                     with self.db.transaction() as conn:
                         enabled = conn.execute("SELECT enabled FROM sources WHERE id=?", (source["id"],)).fetchone()[0]
                     if not enabled or source["next_scan_after"] and source["next_scan_after"] > now():
@@ -129,10 +143,15 @@ class Discovery:
                                 touch_not_modified(self.db, source["id"], local)
                             else:
                                 persist_batch(self.db, config, connector, batch.records, background, preferences, local, budget)
-                                reconcile_missing(self.db, source["id"], {str(r.get("id")) for r in batch.records if isinstance(r, dict) and r.get("id") is not None})
+                                batch.checkpoint['scan_rejections']=local['rejected_records']+(source['checkpoint'].get('scan_rejections',0) if batch.checkpoint.get('start_offset',0) else 0)
+                                if batch.checkpoint.get("complete") and not batch.checkpoint['scan_rejections']:
+                                    membership=batch.checkpoint.get('scan_seen_ids')
+                                    reconcile_missing(self.db, source["id"], set(membership) if membership is not None else {str(r.get("id")) for r in batch.records if isinstance(r, dict) and r.get("id") is not None})
                             checkpoint = batch.checkpoint
-                            status = "PARTIAL" if local["rejected_records"] else "SUCCESS"
+                            status = "PARTIAL" if local["rejected_records"] or checkpoint.get('pending_details') or not checkpoint.get("complete") else "SUCCESS"
+                            partial_sources = partial_sources or status == "PARTIAL"
                             cooldown = source.get("source_cooldown_seconds") if source.get("source_cooldown_seconds") is not None else self.settings.cooldown_seconds
+                            cooldown = max(cooldown, checkpoint.get("retry_after", 0))
                             cache_control = checkpoint.get("cache-control", "")
                             import re
                             age = re.search(r"(?:^|,)\s*max-age=(\d+)", cache_control)
@@ -156,7 +175,7 @@ class Discovery:
         except Exception:
             # Safe diagnostic only; never log external descriptions/headers/exception values.
             error = "discovery_internal_error"
-        status = "FAILED" if error else "PARTIAL" if totals["failed_sources"] or totals["rejected_records"] else "COMPLETED"
+        status = "FAILED" if error else "PARTIAL" if partial_sources or totals["failed_sources"] or totals["rejected_records"] else "COMPLETED"
         self.finish(run_id, totals, time.monotonic() - started, status, error)
         return self.get_run(run_id)
 
@@ -173,6 +192,58 @@ class Discovery:
                 source["metrics"] = json.loads(source["metrics"])
                 result["sources"].append(source)
             return result
+
+    def execute_detail_checks(self,run_id):
+        """Use the same lease/budget/journal for official JD checks of stored metadata.
+
+        List-feed cooldowns are untouched. Previously verified unchanged JDs use
+        the existing source snapshot cache; only separate detail resources are read.
+        """
+        from .policy_hooks import check
+        check('research_worker','VERIFICATION')
+        from .public_connectors import Batch
+        started=time.monotonic();totals=metrics();totals['scope']='stored_official_details'
+        settings=self.settings.model_copy(update={'max_requests':min(12,self.settings.max_requests),'max_runtime_seconds':min(60,self.settings.max_runtime_seconds)})
+        budget=RequestBudget(settings);pending=[];cache_hits=0;error=None
+        service=JobService(self.db)
+        try:
+            with self.db.transaction() as conn:
+                candidate=service._candidate(conn);preferences=candidate.search_profile();background=candidate.search_background()
+            with self.client_factory() as client:
+                for source in self.registry.list():
+                    if not source['enabled'] or source['provider']!='smartrecruiters':continue
+                    if source['checkpoint'].get('detail_next_after','')>now() or (source['checkpoint'].get('pending_details') and source['checkpoint'].get('retry_after',0)>0 and (source['next_scan_after'] or '')>now()):
+                        totals['detail_skipped_cooldown']=totals.get('detail_skipped_cooldown',0)+1;continue
+                    config=SourceConfig(**{k:source[k] for k in SourceConfig.model_fields if k in source})
+                    with self.db.transaction() as conn:
+                        cached={row['source_key']:json.loads(row['snapshot']) for row in conn.execute('SELECT source_key,snapshot FROM source_references WHERE source=? AND snapshot IS NOT NULL',(source['id'],))}
+                    records=[]
+                    for identifier,snapshot in cached.items():
+                        job=snapshot['job'];evidence=snapshot['evidence']
+                        records.append({'id':identifier,'name':job['title'],'company':{'identifier':config.board,'name':job['company']},
+                            'location':{'fullLocation':job['location'],'country':'in','remote':job['work_mode']=='remote','hybrid':job['work_mode']=='hybrid'},
+                            'releasedDate':evidence.get('published_at'),'typeOfEmployment':evidence.get('employment_type')})
+                    connector=CONNECTORS['smartrecruiters']();batch=connector.enrich(config,Batch(records,{}),PublicReader(client,budget,totals),cached,preferences)
+                    changed=[row for row in batch.records if 'jobAd' in row]
+                    if changed:
+                        committed_counts=totals.copy()
+                        try:persist_batch(self.db,config,connector,changed,background,preferences,totals,budget)
+                        except Exception:
+                            totals=committed_counts;raise
+                    if batch.checkpoint.get('pending_details'):
+                        checkpoint=source['checkpoint'] | {'detail_next_after':future_timestamp(max(60,batch.checkpoint.get('retry_after',0))),
+                            'pending_details':batch.checkpoint['pending_details']}
+                        with self.db.transaction() as conn:conn.execute('UPDATE sources SET checkpoint=? WHERE id=?',(json.dumps(checkpoint),source['id']))
+                    elif source['checkpoint'].get('pending_details'):
+                        checkpoint=source['checkpoint'].copy();checkpoint.pop('pending_details',None);checkpoint.pop('detail_next_after',None)
+                        with self.db.transaction() as conn:conn.execute('UPDATE sources SET checkpoint=? WHERE id=?',(json.dumps(checkpoint),source['id']))
+                    pending.extend({'source':source['id'],**row} for row in batch.checkpoint.get('pending_details',[]));cache_hits+=batch.checkpoint.get('detail_cache_hits',0)
+        except Exception as failure:
+            error=failure.code if isinstance(failure,ProviderError) else 'detail_check_internal_error'
+        totals['detail_cache_hits']=cache_hits;totals['pending_details']=pending
+        status='PARTIAL' if pending or error else 'COMPLETED'
+        self.finish(run_id,totals,time.monotonic()-started,status,error)
+        return self.get_run(run_id)
 
     def latest(self):
         with self.db.transaction() as conn:

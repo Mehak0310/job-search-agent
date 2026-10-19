@@ -74,8 +74,14 @@ class RequestBudget:
     def __init__(self, settings: DiscoverySettings, clock=time.monotonic, sleep=time.sleep):
         self.settings, self.clock, self.sleep = settings, clock, sleep
         self.deadline = clock() + settings.max_runtime_seconds
+        self.network_deadline = self.deadline - min(10, settings.max_runtime_seconds * .1)
         self.requests = 0
         self.lock = threading.Lock()
+        self.host_slots = {}
+
+    def host_slot(self, host):
+        with self.lock:
+            return self.host_slots.setdefault(host, threading.BoundedSemaphore(2))
 
     def check(self):
         if self.clock() >= self.deadline:
@@ -84,18 +90,28 @@ class RequestBudget:
     def request(self):
         with self.lock:
             self.check()
+            self.check_network()
             if self.requests >= self.settings.max_requests:
                 raise ProviderError("request_budget_exhausted")
             self.requests += 1
 
+    def check_network(self):
+        if self.clock() >= self.network_deadline:
+            raise ProviderError('runtime_budget_exhausted')
+
 
 class PublicReader:
-    HOSTS = {"boards-api.greenhouse.io", "api.lever.co", "api.eu.lever.co", "remoteok.com", "weworkremotely.com"}
+    HOSTS = {"boards-api.greenhouse.io", "api.lever.co", "api.eu.lever.co", "remoteok.com", "weworkremotely.com", "api.smartrecruiters.com", "www.amazon.jobs"}
 
     def __init__(self, client: httpx.Client, budget: RequestBudget, counters: dict):
         self.client, self.budget, self.counters = client, budget, counters
 
     def get(self, url: str, params: dict, headers=None, format="json") -> tuple[object, dict, bool]:
+        host = urlsplit(url).hostname
+        with self.budget.host_slot(host):
+            return self._get(url, params, headers, format)
+
+    def _get(self, url: str, params: dict, headers=None, format="json") -> tuple[object, dict, bool]:
         parts = urlsplit(url)
         if parts.scheme != "https" or parts.hostname not in self.HOSTS or parts.username or parts.password or parts.port not in {None, 443}:
             raise ProviderError("unsafe_endpoint")
@@ -104,7 +120,7 @@ class PublicReader:
             self.counters["requests"] += 1
             delay, failure = 0, None
             try:
-                timeout = min(self.budget.settings.timeout_seconds, max(0.01, self.budget.deadline - self.budget.clock()))
+                timeout = min(self.budget.settings.timeout_seconds, max(0.01, self.budget.network_deadline - self.budget.clock()))
                 with self.client.stream("GET", url, params=params, headers=headers or {}, timeout=timeout, follow_redirects=False) as response:
                     if response.status_code == 304:
                         return None, {}, True
@@ -127,7 +143,7 @@ class PublicReader:
                             raise ProviderError("response_too_large")
                         content = bytearray()
                         for chunk in response.iter_bytes():
-                            self.budget.check()
+                            self.budget.check_network()
                             if len(content) + len(chunk) > self.budget.settings.max_response_bytes:
                                 raise ProviderError("response_too_large")
                             content.extend(chunk)
@@ -179,10 +195,13 @@ class GreenhouseConnector:
 
     def normalize(self, source: SourceConfig, record: dict) -> tuple[JobInput, str, dict]:
         description = plain_text(record.get("content", ""))
-        location = record["location"]["name"]
+        raw_location = record["location"]["name"]
+        if not isinstance(raw_location,str) or not raw_location.strip():
+            raise ValueError("invalid_location")
+        location = raw_location if len(raw_location)<=200 else raw_location[:197].rstrip(" ,;")+"..."
         mode = "remote" if "remote" in key(location) else "hybrid" if "hybrid" in key(location) else "unknown"
         evidence = extract_requirements(description)
-        evidence.update(source_updated_at=record.get("updated_at"), timestamp_provenance="greenhouse.updated_at")
+        evidence.update(source_updated_at=record.get("updated_at"), timestamp_provenance="greenhouse.updated_at",source_location=raw_location[:2000])
         job = JobInput(source=source.id, source_job_id=str(record["id"]), company=source.company, title=record["title"], location=location, work_mode=mode, description=description, skills=evidence["mentioned"], application_url=record["absolute_url"])
         if not isinstance(record["id"], (str, int)) or isinstance(record["id"], bool) or not job.source_job_id or not job.application_url.startswith("https://"):
             raise ValueError("invalid_source_record")
@@ -269,3 +288,9 @@ class WWRConnector:
         return job,url,evidence
 
 CONNECTORS = {"greenhouse": GreenhouseConnector, "lever": LeverConnector, "remoteok": RemoteOKConnector, "wwr": WWRConnector}
+
+# Imported after shared reader types to avoid a second transport/orchestrator.
+from .smartrecruiters import SmartRecruitersConnector
+CONNECTORS["smartrecruiters"] = SmartRecruitersConnector
+from .amazon_connector import AmazonConnector
+CONNECTORS["amazon"] = AmazonConnector

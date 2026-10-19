@@ -19,7 +19,7 @@ class Category(StrEnum):
 
 class SourceConfig(StrictModel):
     id: str = Field(pattern=r"^[a-z0-9][a-z0-9_-]{0,59}$")
-    provider: str = Field(pattern=r"^(greenhouse|lever|remoteok|wwr)$")
+    provider: str = Field(pattern=r"^(greenhouse|lever|remoteok|wwr|smartrecruiters|amazon)$")
     company: str = Field(min_length=1, max_length=200)
     board: str = Field(pattern=r"^[A-Za-z0-9][A-Za-z0-9_-]{0,99}$")
     region: str = Field(default="global", pattern=r"^(global|eu)$")
@@ -44,7 +44,7 @@ class SourceToggle(StrictModel):
 
 class DiscoverySettings(StrictModel):
     timeout_seconds: float = Field(default=10, ge=0.1, le=30)
-    retry_limit: int = Field(default=2, ge=0, le=3)
+    retry_limit: int = Field(default=2, ge=0, le=2)
     cooldown_seconds: int = Field(default=3600, ge=0, le=86400)
     concurrency_limit: int = Field(default=4, ge=1, le=8)
     max_requests: int = Field(default=20, ge=1, le=100)

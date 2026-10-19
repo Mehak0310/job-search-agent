@@ -31,14 +31,19 @@ class Registry:
 
     def seed(self, config: DiscoveryConfig):
         with self.db.transaction() as conn:
-            empty = not conn.execute("SELECT 1 FROM sources").fetchone()
-        if empty and config.sources:
-            self.sync(config)
+            existing = {row[0] for row in conn.execute("SELECT id FROM sources")}
+        missing = [source for source in config.sources if source.id not in existing]
+        if missing:
+            # Install new configured sources without resetting user toggles or cursors.
+            self.sync(config.model_copy(update={"sources":missing}))
 
     def list(self) -> list[dict]:
         with self.db.transaction() as conn:
             sources = [dict(row) for row in conn.execute("SELECT * FROM sources ORDER BY id")]
             for source in sources:
+                last = conn.execute("SELECT metrics FROM discovery_source_runs WHERE source_id=? ORDER BY started_at DESC,run_id DESC LIMIT 1", (source['id'],)).fetchone()
+                source['last_run_metrics'] = json.loads(last['metrics']) if last else None
+                source['retained_job_count'] = conn.execute("SELECT COUNT(DISTINCT job_id) FROM source_references WHERE source=?", (source['id'],)).fetchone()[0]
                 source["enabled"] = bool(source["enabled"])
                 source["verified"] = bool(source["verified"])
                 source["india_relevant"] = None if source["india_relevant"] is None else bool(source["india_relevant"])
