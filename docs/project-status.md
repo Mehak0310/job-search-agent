@@ -1,5 +1,7 @@
 # Local-first job research checkpoint
 
+Current priority: [live workflow repair](live-workflow-repair.md). At the latest recorded checkpoint, four applications were connected and awaiting inspection/eligibility verification; one was manually reported submitted but not independently verified; zero verified eligible pending candidates; and zero employer forms ready for review. A fresh eligible batch of five remains blocked. Historical targeted fixes and regression results are in the repair report. See [repair milestone plan](../specs/live-workflow-repair.md). No repair commit, push, field filling, upload or employer submission.
+
 Privacy refactor implemented and verified locally; legitimate concurrent operational activity confirmed by the user. Final publication approval remains required. This document is the sanitized publication handoff. Original operational notes and candidate-specific history were preserved under ignored local data before editing; they are not publication inputs.
 
 ## Implemented
@@ -19,4 +21,4 @@ Production backend was not restarted or reconciled. New source is exercised only
 
 The six-workspace UI proposal remains separate from production visual acceptance. Design contract, interactive proposal, 78 proposal images and 72 private baseline screenshots are preserved. Production visual acceptance is NOT COMPLETE; no redesign implementation has started.
 
-HEAD at the start of this refactor: `5eb64454f4e04c0e0bfe624c2d70380e7cc2346f`. No new commit. Existing origin is public; destination remains `main` tracking `origin/main`, subject to final remote verification.
+No new commit was created or published during this refactor.
