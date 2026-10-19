@@ -599,8 +599,10 @@ def create_app(db_path: str | Path = "data/jobs.sqlite3", discovery_config: Disc
     @app.post('/api/browser/applications/{identifier}/inspect')
     def browser_inspect(identifier:str):
         from .browser_applications import reinspect
+        from playwright.sync_api import Error as BrowserError
         try:return reinspect(service.db,identifier)
         except ValueError as error:raise HTTPException(409,str(error)) from None
+        except BrowserError:raise HTTPException(409,'Employer form inspection could not connect to the saved tab. Check the dedicated Chrome window and refresh progress; saved fields and documents are preserved.') from None
 
     @app.post('/api/browser/applications/{identifier}/resume')
     def browser_resume(identifier:str):

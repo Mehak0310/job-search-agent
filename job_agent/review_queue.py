@@ -24,7 +24,8 @@ def hidden_job_ids(db):
     identities={j['id']:vacancy_identity(j) for j in jobs}
     suppressed_identities={identities[j['id']] for j in jobs
         if j['status'] in processed or j['id'] in submitted
-        or keys.get(j['id'],'job:'+j['id']) in dismissed}
+        or keys.get(j['id'],'job:'+j['id']) in dismissed
+        or j['id'] in unavailable or j['activity_status']=='CLOSED'}
     return {j['id'] for j in jobs
         if j['status'] in processed or j['id'] in submitted
         or j['id'] in unavailable or j['activity_status']=='CLOSED'

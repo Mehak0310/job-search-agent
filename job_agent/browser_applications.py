@@ -467,18 +467,27 @@ def launch_worker(db,batch_id,allow_upload=True,only_application=None):
 
 
 def switch_tab(db,application_id):
-    from playwright.sync_api import sync_playwright
+    from playwright.sync_api import sync_playwright,Error as BrowserError,TimeoutError as BrowserTimeout
     store=BrowserStore(db);item=store.get(application_id)
     with workflow_lease(root_for(db)/'controller'):
         try:metadata=browser_metadata()
         except OSError:
-            store.update(application_id,state='SESSION_LOST');return {'state':'SESSION_LOST'}
-        with sync_playwright() as p:
-            browser=p.chromium.connect_over_cdp(f'http://127.0.0.1:{PORT}')
-            page=recover_page(browser,item)
-            if not page:
-                store.update(application_id,state='SESSION_LOST');return {'state':'SESSION_LOST'}
-            page.bring_to_front();return {'state':item['state']}
+            store.update(application_id,state='SESSION_LOST',retry_condition='Dedicated Chrome is not connected. Restore its saved session and refresh progress. Review existing employer progress before reconstruction; do not repeat uploads.')
+            return {'state':'SESSION_LOST'}
+        try:
+            with sync_playwright() as p:
+                browser=p.chromium.connect_over_cdp(f'http://127.0.0.1:{PORT}',timeout=10000)
+                page=recover_page(browser,item)
+                if not page:
+                    store.update(application_id,state='SESSION_LOST',retry_condition='Saved employer tab was not found. Review existing employer progress before reconstruction; uploads will not be repeated.')
+                    return {'state':'SESSION_LOST'}
+                page.bring_to_front()
+                store.update(application_id,target_id=target_id(page),session_id=metadata['webSocketDebuggerUrl'].split('/')[-1],retry_condition=None)
+                return {'state':'TAB_SELECTED'}
+        except BrowserTimeout:
+            raise ValueError('Browser connection timed out. Check the dedicated Chrome window, then retry Switch to application tab. Saved progress is preserved.') from None
+        except BrowserError:
+            raise ValueError('Browser tab could not be selected. Check the dedicated Chrome window and refresh progress before retrying.') from None
 
 
 def reinspect(db,application_id):
@@ -490,7 +499,7 @@ def reinspect(db,application_id):
         except OSError:
             store.update(application_id,state='SESSION_LOST');return store.list()
         with sync_playwright() as p:
-            browser=p.chromium.connect_over_cdp(f'http://127.0.0.1:{PORT}')
+            browser=p.chromium.connect_over_cdp(f'http://127.0.0.1:{PORT}',timeout=10000)
             page=recover_page(browser,item)
             if not page:
                 store.update(application_id,state='SESSION_LOST');return store.list()

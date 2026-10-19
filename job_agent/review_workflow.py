@@ -97,7 +97,12 @@ def progress(db):
         operation=next((w for w in operations if w['batch_id']==batch['id']),{})
         if operation:
             ids=set(operation['application_ids']);rows=[r for r in store.list(include_history=True) if r['id'] in ids]
-        batch.update(total=len(rows),processed=sum(r['state']!='PREPARING' for r in rows),ready=sum(r['state']=='READY_FOR_USER_REVIEW' for r in rows),needs_answers=sum(r['state']=='NEEDS_USER_ANSWER' for r in rows),agent_checks=sum(r['state'] in {'ERROR','SESSION_LOST','NEEDS_EMPLOYER_CHECK','NEEDS_LOGIN'} for r in rows),application_ids=[r['id'] for r in rows],worker_state=operation.get('state'),worker_owner=operation.get('owner'),heartbeat_at=operation.get('heartbeat_at'),phase=operation.get('phase'),updated_at=operation.get('updated_at'),retry_condition=operation.get('retry_condition'))
+        submitted=sum(r['application_outcome']!='NOT_SUBMITTED' for r in rows)
+        pending=[r for r in rows if r['application_outcome']=='NOT_SUBMITTED']
+        preparing=sum(r['state']=='PREPARING' for r in pending)
+        ready=sum(r['state']=='READY_FOR_USER_REVIEW' for r in pending)
+        answers=sum(r['state']=='NEEDS_USER_ANSWER' for r in pending)
+        batch.update(total=len(rows),processed=len(rows)-preparing,preparing=preparing,submitted=submitted,ready=ready,needs_answers=answers,agent_checks=len(pending)-preparing-ready-answers,application_ids=[r['id'] for r in rows],worker_state=operation.get('state'),worker_owner=operation.get('owner'),heartbeat_at=operation.get('heartbeat_at'),phase=operation.get('phase'),updated_at=operation.get('updated_at'),retry_condition=operation.get('retry_condition'))
     with db.transaction() as conn:profile=json.loads(conn.execute('SELECT config FROM candidate_profiles_v2 ORDER BY version DESC LIMIT 1').fetchone()[0])
     manifest_path=db.path.parent/'documents'/'manifest.json'
     manifest=json.loads(manifest_path.read_text(encoding='utf-8')) if manifest_path.is_file() else {'documents':[]}

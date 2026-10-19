@@ -59,6 +59,8 @@ def refresh(db):
     from .requirements import assess_requirements
     from .browser_store import vacancy_identity,ats_for
     warm_messages(db)
+    from .review_queue import hidden_job_ids
+    hidden=hidden_job_ids(db)
     with db.transaction() as conn:
         for q in conn.execute("SELECT * FROM application_priority WHERE state='RESERVED'").fetchall():
             work=conn.execute('SELECT state FROM browser_workflows WHERE batch_id=? ORDER BY created_at DESC LIMIT 1',(q['batch_id'],)).fetchone()
@@ -76,6 +78,7 @@ def refresh(db):
             if c['source_message_id'] in messages:contacts.setdefault(c['job_key'],[]).append(messages[c['source_message_id']])
         existing={r['job_id']:dict(r) for r in conn.execute('SELECT * FROM application_priority')}
         preparations={r['job_id']:dict(r) for r in conn.execute('SELECT * FROM browser_applications')}
+        prepared_identities={r['identity'] for r in preparations.values()}
         sources={r['job_id']:r['source'] for r in conn.execute('SELECT job_id,source FROM source_references ORDER BY id')}
         submitted={r[0] for r in conn.execute("SELECT job_id FROM status_history WHERE status='SUBMITTED' UNION SELECT job_id FROM browser_applications WHERE application_outcome IN ('USER_REPORTED_SUBMITTED','SUBMISSION_CONFIRMED') OR state IN ('USER_REPORTED_SUBMITTED','SUBMISSION_CONFIRMED') UNION SELECT a.job_id FROM browser_events e JOIN browser_applications a ON a.id=e.application_id WHERE json_extract(e.details,'$.state') IN ('USER_REPORTED_SUBMITTED','SUBMISSION_CONFIRMED')")}
         submitted_identities={vacancy_identity(j) for j in rows if (j['id'] in submitted or j['status']=='SUBMITTED') and j['company'] and ats_for(j['application_url'] or '')}
@@ -90,7 +93,8 @@ def refresh(db):
             state='PENDING' if eligibility=='PASS' else 'EXCLUDED' if eligibility=='FAIL' else 'VERIFICATION'
             reason='Verified fit descending; deadline, freshness and stable job ID break ties.' if state=='PENDING' else 'Verification required: '+', '.join(g for g in ('active_state','india_state','headcount_state','payroll_state') if job[g]!='PASS')+'; '+str(assessment['reasons'][0] if assessment.get('reasons') else assessment['state'])
             if job['id'] in submitted or job['status']=='SUBMITTED' or identity in submitted_identities:state='SUBMITTED'
-            elif app and eligibility=='PASS':state='REVIEW_REQUIRED' if prior and prior['state']=='REVIEW_REQUIRED' else 'EXISTING_PROGRESS'
+            elif job['id'] in hidden:state='SUPPRESSED';reason='Unavailable or removed from active review; history retained.'
+            elif (app or identity in prepared_identities) and eligibility=='PASS':state='REVIEW_REQUIRED' if prior and prior['state']=='REVIEW_REQUIRED' else 'EXISTING_PROGRESS'
             elif job['status'] in {'INTERVIEW','REJECTED','OFFER','NOT_RELEVANT'}:state='SUPPRESSED'
             elif not ats_for(job['application_url'] or ''):state='UNSUPPORTED_ROUTE' if eligibility=='PASS' else state
             if identity in identities and state=='PENDING':state='DUPLICATE'

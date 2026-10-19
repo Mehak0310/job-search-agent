@@ -49,7 +49,7 @@ async function renderBrowserState(){
  else if(!activeReviewBatch)activeReviewBatch=(batches.find(b=>['QUEUED','RUNNING'].includes(b.status))||batches[0])?.id;
  const batch=batches.find(b=>b.id===activeReviewBatch);
  $('document-availability').textContent=(progress.documents||[]).map(d=>`${d.name}: ${d.available?'approved PDF available':'file unavailable; please attach the approved PDF'}`).join(' | ');
- $('browser-progress').textContent=batch?`Current review batch: ${batch.processed} of ${batch.total} processed; ${batch.ready} ready for your review; ${batch.needs_answers} need answers; ${batch.agent_checks} need agent checks.`:rows.length?`${rows.length} tracked applications. ${rows.filter(r=>r.state==='PREPARING').length} preparing.`:'No browser forms prepared yet.';
+ $('browser-progress').textContent=batch?`Current review batch: ${batch.processed} of ${batch.total} processed; ${batch.ready} ready for your review; ${batch.needs_answers} need answers; ${batch.agent_checks} need agent checks; ${batch.submitted||0} marked submitted (see history); ${batch.preparing||0} preparing.`:rows.length?`${rows.length} tracked applications. ${rows.filter(r=>r.state==='PREPARING').length} preparing.`:'No browser forms prepared yet.';
  const busy=progress.work_active||batch&&['QUEUED','RUNNING'].includes(batch.status);if(busy&&batch)observedReviewBatches.add(batch.id);
  const operation=(progress.operations||[]).find(w=>['QUEUED','RUNNING'].includes(w.state));
  if(operation)$('browser-progress').textContent+=` ${operation.phase}. Last heartbeat: ${formatCheckpoint(operation.heartbeat_at)}.`;
@@ -67,6 +67,8 @@ async function renderBrowserState(){
   card.append(text('h3',`${row.company} | ${row.title}`),text('strong',unavailable?'No longer accepting applications':row.status_message||(row.state==='SESSION_LOST'?'Browser session lost; application history preserved':row.state.replaceAll('_',' ')),'chip review-state state-'+row.state));
    if(row.session_health)card.append(text('p',`Browser: ${row.session_health.toLowerCase()} | ${row.completed_fields||0} fields completed | ${row.phase||'Awaiting inspection'}`));
    if(row.retry_condition)card.append(text('p',row.retry_condition,'manual'));
+   if(row.inspection.error_code)card.append(text('p','Last inspection blocker: '+row.inspection.error_code,'manual'));
+   if(row.session_health==='LOST'&&!row.retry_condition)card.append(text('p','Next action: restore the dedicated Chrome session and refresh progress. Check existing employer progress before reconstruction; do not repeat uploads.','manual'));
    card.append(text('p',`Last form check: ${formatCheckpoint(row.inspection.verified_at)}`));
    if(row.state==='PREPARING')card.append(text('p',row.inspection.stage||'Opening and inspecting the application...'));
    const personal=row.missing.filter(m=>!/^Agent action:|\.pdf:|ATS form|Saved tab|Last Name currently/i.test(m));
@@ -74,7 +76,7 @@ async function renderBrowserState(){
    if(row.checks.length)card.append(bulletSection('Employer research (handled by the agent)',row.checks.map(readableCheck)));
    card.append(bulletSection('Documents',row.documents.map(d=>`${d.name}: ${d.verified?'filename and acceptance verified':'being reconciled; no duplicate upload'}`),'No verified upload recorded.'));
    const actions=text('div','','job-actions');
-   if(row.target_id&&!unavailable){const review=text('button','Switch to application tab','secondary');review.addEventListener('click',()=>guarded(async()=>{const result=await api('/api/browser/applications/'+row.id+'/switch',{method:'POST'});message(result.state==='SESSION_LOST'?'Agent will check session recovery; no application is assumed submitted.':'Application tab selected.');await refreshBrowser();}));actions.append(review);}
+   if(row.target_id&&!unavailable){const review=text('button','Switch to application tab','secondary');review.addEventListener('click',()=>guarded(async()=>{review.disabled=true;message('Connecting to the saved employer tab...');try{const result=await api('/api/browser/applications/'+row.id+'/switch',{method:'POST'});message(result.state==='SESSION_LOST'?'Saved employer tab is unavailable. Restore the dedicated Chrome session and refresh progress. Review employer progress before reconstruction; do not repeat uploads.':'Application tab selected.');await refreshBrowser();}finally{review.disabled=false;}}));actions.append(review);}
    if(row.state==='NEEDS_USER_ANSWER'){const answers=text('button','Answer missing questions','secondary');answers.addEventListener('click',()=>guarded(()=>askApplicationAnswers(row.id)));actions.append(answers);}
    card.append(actions);
    const details=document.createElement('details');details.className='review-tools';details.open=expanded.has(row.id);details.append(text('summary','Troubleshooting and manual history'));
@@ -88,7 +90,7 @@ async function renderBrowserState(){
  if(busy||rows.some(r=>r.state==='PREPARING'))reviewTimer=setTimeout(()=>refreshBrowser(),document.hidden?15000:3000);
  if(batch&&!busy&&['REVIEW','ERROR'].includes(batch.status)){
    const key='batch-notified:'+batch.id+':'+batch.finished_at;
-   const summary=`Review batch processed: ${batch.processed}/${batch.total}. ${batch.ready} ready for review, ${batch.needs_answers} need answers, ${batch.agent_checks} need agent checks. Nothing was submitted.`;
+   const summary=`Review batch processed: ${batch.processed}/${batch.total}. ${batch.ready} ready for review, ${batch.needs_answers} need answers, ${batch.agent_checks} need agent checks, ${batch.submitted||0} marked submitted (history). No automatic submission.`;
    $('batch-completion').textContent=summary;
    if(observedReviewBatches.has(batch.id)&&!sessionStorage.getItem(key)){sessionStorage.setItem(key,'yes');const sounded=batchBeep();message(summary+(sounded?'':' Sound is unavailable or disabled; this banner is your notification.'));
      const pending=rows.find(r=>r.batch_id===batch.id&&r.state==='NEEDS_USER_ANSWER'&&!promptedQuestions.has(r.id));if(pending&&!$('answer-dialog').open){promptedQuestions.add(pending.id);if(window.askBatchAnswers)await window.askBatchAnswers(batch.id);else await askApplicationAnswers(pending.id);}
