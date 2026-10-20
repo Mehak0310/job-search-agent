@@ -2,8 +2,10 @@
 import hashlib
 import json
 import re
+from datetime import datetime, timedelta, timezone
 from html import unescape
 from .classification import SKILLS, extract_requirements
+from .eligibility import _https_url
 
 VERSION='jd-clauses-3'
 
@@ -11,7 +13,15 @@ def digest(value):
     return hashlib.sha256(json.dumps(value,sort_keys=True,ensure_ascii=False,separators=(',',':'),default=str).encode()).hexdigest()
 
 
-def inventory(job):
+def _timestamp(value):
+    if not value:return None
+    try:
+        parsed=datetime.fromisoformat(str(value).replace('Z','+00:00'))
+        return parsed.replace(tzinfo=timezone.utc) if parsed.tzinfo is None else parsed.astimezone(timezone.utc)
+    except (TypeError,ValueError):return None
+
+
+def inventory(job,at=None):
     raw=job.get('description') or ''
     source_hash=hashlib.sha256(raw.encode()).hexdigest()
     detail=job.get('discovery_detail') or {}
@@ -23,10 +33,14 @@ def inventory(job):
     if not isinstance(provenance,dict):provenance={}
     reviews=provenance.get('nonmandatory_reviews') or []
     if not isinstance(reviews,list):reviews=[]
-    complete=provenance.get('content_status')=='FULL' and provenance.get('description_sha256')==source_hash and bool(provenance.get('source_url'))
+    at=at or datetime.now(timezone.utc)
+    if at.tzinfo is None:at=at.replace(tzinfo=timezone.utc)
+    at=at.astimezone(timezone.utc);verified_at=_timestamp(provenance.get('verified_at'))
+    current=verified_at is not None and at-timedelta(days=7)<=verified_at<=at
+    complete=provenance.get('content_status')=='FULL' and provenance.get('description_sha256')==source_hash and _https_url(provenance.get('source_url')) and current
     issues=[]
     if not raw.strip():issues.append('Full JD content is missing; mandatory requirements cannot be established.')
-    elif not complete:issues.append('Full JD completeness is unverified for this content hash; a current complete source is required.')
+    elif not complete:issues.append('Full JD completeness is unverified, stale, or missing source time for this content hash; a current complete source is required.')
     text=unescape(re.sub(r'<[^>]*>',lambda m:'\n' if re.match(r'</?(?:p|li|br|h[1-6]|div)\b',m[0],re.I) else ' ',raw))
     if re.search(r'\.{3}\s*$|…\s*$|\b(?:truncated|read more|show more|description unavailable)\b',text,re.I) or job.get('description_truncated'):
         issues.append('JD appears partial or truncated; obtain the complete vacancy before eligibility can pass.')

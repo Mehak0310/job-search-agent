@@ -16,7 +16,7 @@ def jobs(tmp_path,scores=(95,90,85,80,75,10)):
     with db.transaction() as c:c.execute("UPDATE jobs SET application_url='https://job-boards.greenhouse.io/example/jobs/100',canonical_application_url='https://job-boards.greenhouse.io/example/jobs/100'")
     approve_requirements(db,first['job_id']);ids=[first['job_id']]
     for index,score in enumerate(scores[1:],101):
-        service.import_rows([JobInput(source='priority-fixture',source_job_id=str(index),company='Example Corp',title='Frontend '+str(index),location='Noida',description='React required.',skills=['react'],work_mode='hybrid',application_url='https://job-boards.greenhouse.io/example/jobs/'+str(index),is_sample=True)])
+        service.import_rows([JobInput(source='priority-fixture',source_job_id=str(index),company='Example Corp',title='Frontend '+str(index),location='Noida, India',description='React required.',skills=['react'],work_mode='hybrid',application_url='https://job-boards.greenhouse.io/example/jobs/'+str(index),is_sample=True)])
     M2DEngine(db).sync_existing_jobs()
     with db.transaction() as c:ids += [r[0] for r in c.execute('SELECT id FROM jobs WHERE id<>? ORDER BY title',(first['job_id'],))]
     for identifier,score in zip(ids,scores):
@@ -40,11 +40,36 @@ def test_unknown_and_failed_eligibility_never_enter_preparation(tmp_path):
     db,_,ids=jobs(tmp_path)
     with db.transaction() as c:
         c.execute("UPDATE job_operational_state SET headcount_state='UNKNOWN' WHERE job_id=?",(ids[0],))
-        c.execute("UPDATE job_operational_state SET india_state='FAIL' WHERE job_id=?",(ids[1],))
+        c.execute("DELETE FROM job_evidence WHERE job_key=? AND kind='headcount'",(ids[0],))
         c.execute("UPDATE jobs SET discovery_detail='{}' WHERE id=?",(ids[2],))
+    M2DEngine(db).record_evidence(ids[1],'india_eligible','FAIL',factual='Employer does not hire in India.',evidence_url='https://careers.example.test/eligibility')
     state=refresh(db);assert all(r['job_id'] not in ids[:3] for r in candidates(db))
     assert BrowserStore(db).batch(ids[:3],3)['selected']==0
     assert next(r for r in state['items'] if r['job_id']==ids[0])['state']=='VERIFICATION'
+
+
+def test_closed_requisition_alias_cannot_reenter_as_fresh_pending(tmp_path):
+    db,_,ids=jobs(tmp_path,(95,90,85))
+    with db.transaction() as c:
+        canonical=c.execute('SELECT canonical_application_url FROM jobs WHERE id=?',(ids[0],)).fetchone()[0]
+        c.execute('UPDATE jobs SET activity_status="CLOSED" WHERE id=?',(ids[0],))
+        c.execute('UPDATE jobs SET canonical_application_url=? WHERE id=?',(canonical,ids[1]))
+    result=refresh(db)
+    assert ids[0] not in [r['job_id'] for r in candidates(db)]
+    assert ids[1] not in [r['job_id'] for r in candidates(db)]
+    assert next(r for r in result['items'] if r['job_id']==ids[1])['eligibility']=='FAIL'
+
+
+def test_batch_returns_fewer_than_five_when_only_one_candidate_is_verified(tmp_path):
+    db,_,ids=jobs(tmp_path,(95,90,85,80,75))
+    with db.transaction() as c:
+        for job_id in ids[1:]:
+            c.execute("DELETE FROM job_evidence WHERE job_key=? AND kind='headcount'",(job_id,))
+    refresh(db)
+    assert [row['job_id'] for row in candidates(db,limit=5)]==[ids[0]]
+    batch=BrowserStore(db).batch(limit=5)
+    assert batch['selected']==1
+    assert len(batch['applications'])==1
 
 
 def test_stable_ties_and_deadline_then_freshness(tmp_path):
@@ -103,6 +128,8 @@ def test_interrupted_reservation_does_not_automatically_retry(tmp_path):
 
 def test_new_verified_gate_evidence_recalculates_pending_without_manual_refresh(tmp_path):
     from job_agent.m2d_models import OperationalFacts
-    db,_,ids=jobs(tmp_path);refresh(db)
+    db,_,ids=jobs(tmp_path)
+    with db.transaction() as c:c.execute("DELETE FROM job_evidence WHERE job_key=? AND kind='headcount'",(ids[0],))
+    refresh(db)
     M2DEngine(db).set_operational_state(ids[0],OperationalFacts(active='PASS',india_eligible='PASS',headcount='UNKNOWN',direct_permanent_payroll='PASS',mandatory_requirements='PASS'),job_id=ids[0])
     with db.transaction() as c:assert c.execute('SELECT state FROM application_priority WHERE job_id=?',(ids[0],)).fetchone()[0]=='VERIFICATION'

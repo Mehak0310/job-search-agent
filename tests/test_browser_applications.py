@@ -5,7 +5,7 @@ from types import SimpleNamespace
 import pytest
 from playwright.sync_api import sync_playwright
 
-from job_agent.browser_store import BrowserStore,vacancy_identity
+from job_agent.browser_store import APPLICATION_PUBLIC_FIELDS,BrowserStore,vacancy_identity
 from job_agent.browser_forms import Dispatcher,NetworkBoundary,GUARD_JS,inventory,public_url
 from job_agent.application_answers import answer,tailored
 from job_agent import browser_applications as runner
@@ -74,15 +74,45 @@ def prepared_store(tmp_path):
     return BrowserStore(db),engine,key
 
 
+def test_review_queue_exposes_eligibility_provenance_and_revokes_stale_ready_label(tmp_path):
+    store,engine,key=prepared_store(tmp_path)
+    batch=store.batch([key],1)
+    application=batch['applications'][0]
+    assert application['eligibility_status']=='PASS'
+    assert application['source_url']==URL
+    assert application['connection_status']=='INSPECTION_REQUIRED'
+    assert application['next_action']
+    store.update(application['id'],state='READY_FOR_USER_REVIEW',missing=[],checks=[])
+    current=store.list(batch['batch_id'])[0]
+    assert current['ready_for_user_review']
+    assert current['eligibility_gates']['employer_size']['evidence']
+    with engine.db.transaction() as conn:
+        conn.execute("UPDATE job_evidence SET verified_at='2000-01-01T00:00:00+00:00' WHERE job_key=? AND kind='active'",(key,))
+    stale=store.list(batch['batch_id'])[0]
+    assert stale['eligibility_status']=='UNKNOWN'
+    assert not stale['ready_for_user_review']
+
+
 def approve_requirements(db,key):
     """Explicit synthetic accepted source/evidence; never used against the live database."""
     import hashlib
+    from job_agent.database import now
+    from job_agent.m2d import M2DEngine
     with db.transaction() as conn:
         profile=json.loads(conn.execute('SELECT config FROM candidate_profiles_v2').fetchone()[0]);profile['professional_skills']=sorted(set(profile.get('professional_skills',[]))|{'react'});profile.setdefault('skill_evidence',{})['react']=[{'source':'user_confirmation','reference':'explicit isolated fixture evidence'}]
         conn.execute('UPDATE candidate_profiles_v2 SET config=?',(json.dumps(profile),))
         url=conn.execute('SELECT application_url FROM jobs WHERE id=?',(key,)).fetchone()[0];description='React required.'
-        conn.execute('UPDATE jobs SET description=?,required_skills=?,required_experience_min=NULL,required_experience_max=NULL,discovery_detail=? WHERE id=?',(description,json.dumps(['react']),json.dumps({'requirements_source':{'content_status':'FULL','source_url':url,'description_sha256':hashlib.sha256(description.encode()).hexdigest(),'retrieval_version':'explicit-isolated-priority-fixture'}}),key))
+        conn.execute('UPDATE jobs SET description=?,required_skills=?,required_experience_min=NULL,required_experience_max=NULL,discovery_detail=? WHERE id=?',(description,json.dumps(['react']),json.dumps({'requirements_source':{'content_status':'FULL','source_url':url,'description_sha256':hashlib.sha256(description.encode()).hexdigest(),'retrieval_version':'explicit-isolated-priority-fixture','verified_at':now()}}),key))
+        conn.execute('UPDATE source_references SET listing_url=?,last_seen=?,imported_at=? WHERE job_id=?',(url,now(),now(),key))
         conn.execute("UPDATE job_operational_state SET active_state='PASS',india_state='PASS',headcount_state='PASS',payroll_state='PASS' WHERE job_id=?",(key,))
+    engine=M2DEngine(db);verified=now()
+    for kind,factual in (
+        ('active','Vacancy is active and open for applications.'),
+        ('india_eligible','Employer explicitly supports employment in India.'),
+        ('headcount','Global workforce of 5,000 employees.'),
+        ('direct_permanent_payroll','India employees are hired directly on permanent full-time payroll.'),
+    ):
+        engine.record_evidence(key,kind,'PASS',factual=factual,evidence_url=url,verified_at=verified)
 
 
 def test_inventory_scoping_limits_and_unknown_required(frame):
@@ -325,6 +355,62 @@ def test_unavailable_removal_survives_reload_without_deleting_job(tmp_path):
     with store.db.transaction() as conn:
         assert conn.execute('SELECT current_version FROM application_packets').fetchone()[0]==before
         assert conn.execute("SELECT count(*) FROM job_evidence WHERE kind='review_queue_dismissal'").fetchone()[0]==1
+
+
+def test_applications_api_excludes_private_discovery_and_gmail_references(tmp_path):
+    from fastapi.testclient import TestClient
+    from job_agent.main import create_app
+
+    store, _, key = prepared_store(tmp_path)
+    batch = store.batch([key], 1)
+    private_marker = "private-discovery-payload-synthetic"
+    with store.db.transaction() as conn:
+        conn.execute(
+            "UPDATE jobs SET discovery_detail=? WHERE id=?",
+            (
+                json.dumps(
+                    {
+                        "source_message_refs": ["gmail-message-id-synthetic"],
+                        "internal_private_metadata": private_marker,
+                        "requirements_source": {"private_note": private_marker},
+                    }
+                ),
+                key,
+            ),
+        )
+    with TestClient(create_app(store.db.path)) as client:
+        response = client.get("/api/browser/applications?include_history=true")
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload[0]["id"] == batch["applications"][0]["id"]
+    serialized = json.dumps(payload)
+    assert "source_message_refs" not in serialized
+    assert "gmail-message-id-synthetic" not in serialized
+    assert "internal_private_metadata" not in serialized
+    assert private_marker not in serialized
+    assert "discovery_detail" not in payload[0]
+    assert "session_id" not in payload[0]
+    assert "confirmation_ref" not in payload[0]
+    assert set(payload[0]) <= APPLICATION_PUBLIC_FIELDS
+
+
+def test_manual_submission_suppresses_legacy_ready_state_and_duplicates(tmp_path):
+    store, _, key = prepared_store(tmp_path)
+    batch = store.batch([key], 1)
+    identifier = batch["applications"][0]["id"]
+    store.update(identifier, state="USER_REPORTED_SUBMITTED")
+    with store.db.transaction() as conn:
+        conn.execute(
+            "UPDATE browser_applications SET state='READY_FOR_USER_REVIEW' WHERE id=?",
+            (identifier,),
+        )
+
+    application = store.list(include_history=True)[0]
+    assert application["application_outcome"] == "USER_REPORTED_SUBMITTED"
+    assert application["state"] == "READY_FOR_USER_REVIEW"
+    assert not application["ready_for_user_review"]
+    assert "do not create a duplicate" in application["next_action"]
+    assert store.batch([key], 1)["selected"] == 0
 
 
 def test_missing_and_closed_links_do_not_enter_review(tmp_path):

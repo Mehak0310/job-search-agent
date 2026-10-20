@@ -1,6 +1,20 @@
 # Local-first job research checkpoint
 
-Current priority: [live workflow repair](live-workflow-repair.md). At the latest recorded checkpoint, four applications were connected and awaiting inspection/eligibility verification; one was manually reported submitted but not independently verified; zero verified eligible pending candidates; and zero employer forms ready for review. A fresh eligible batch of five remains blocked. Targeted fixes and historical regression results are documented in the repair report. No filling, upload or employer submission was performed; no repair commit or push. The publication handoff below is historical.
+## Current local handoff
+
+The current uncommitted milestone is based on `main` at `e94340d61ee88aea137a878ad1e48ca860f3e60f`. It adds evidence-backed eligibility checks, mode-specific employer-size validation, closed-alias exclusion, richer Applications projections and synthetic UI failure-isolation coverage.
+
+**Implemented:** deterministic gates require recent sourced evidence; queue and browser-preparation checks share those gates; the UI displays blockers and safe next actions without overstating ready states; batch selection remains capped at five and may return fewer.
+
+**Verified:** focused Python passed 159 tests; full Windows Python passed 576 tests with 91.94% aggregate coverage. The complete synthetic UI suite passed 157 tests and R2 passed two. After a fixture-only Windows process-control repair, R1 passed four consecutive runs; relevant lifecycle Python passed 40 tests and R2 passed again. Exact commands are in [project status](project-status.md).
+
+**Blocked / planned:** current production records, Chrome sessions, live employer evidence and a genuinely eligible batch were not inspected. No five-candidate or live-form acceptance is claimed. The approved freshness policy is 7 days for vacancy evidence and 90 days for employer evidence. Employer-specific work authorization, live ATS form acceptance and production activation remain unverified.
+
+No commit/push, service restart, schedule change, Gmail operation, employer form interaction, upload or submission was performed in this milestone. The earlier live-workflow report below records a historical read-only checkpoint; its application counts are not current-state inspection.
+
+## Historical workflow checkpoint
+
+At the earlier recorded checkpoint, four applications were connected and awaiting inspection/eligibility verification; one was manually reported submitted but not independently verified; zero verified eligible pending candidates; and zero employer forms ready for review. A fresh eligible batch of five remained blocked. The publication handoff below is historical.
 
 Privacy refactor implemented and verified locally; legitimate concurrent operational activity confirmed by the user. Final publication approval remains required. This document is the sanitized publication handoff; private source evidence is excluded.
 

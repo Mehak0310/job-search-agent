@@ -9,6 +9,14 @@ from .runtime_policy import digest
 STATES={'PREPARING','NEEDS_LOGIN','NEEDS_USER_ANSWER','NEEDS_EMPLOYER_CHECK',
         'READY_FOR_USER_REVIEW','USER_REPORTED_SUBMITTED','SUBMISSION_CONFIRMED','SESSION_LOST','ERROR','AWAITING_INSPECTION'}
 
+APPLICATION_PUBLIC_FIELDS={
+    'id','batch_id','job_id','url','ats','state','target_id','inspection','missing','checks','documents','updated_at',
+    'application_outcome','session_health','preparation_state','last_sync_at','completed_fields','phase','retry_condition',
+    'company','title','vacancy_url','status_message','submission_label','submission_verified','eligibility_status',
+    'eligibility_gates','eligibility_reasons','source_url','connection_status','next_action','ready_for_user_review',
+    'answer_resolutions',
+}
+
 
 def ats_for(url):
     p=urlsplit(url);host=p.hostname or ''
@@ -42,10 +50,13 @@ class BrowserStore:
             if submission_projection(conn,job_id)['application_outcome'] in SUBMITTED:raise ValueError('existing_submission_history')
         from .employer_evidence import reuse_large_employer_check
         job=reuse_large_employer_check(self.db,dict(row))
+        from .eligibility import assess_hard_eligibility
         from .requirements import assess_requirements
         with self.db.transaction() as conn:
             profile=json.loads(conn.execute('SELECT config FROM candidate_profiles_v2 ORDER BY version DESC LIMIT 1').fetchone()[0])
             evidence=[dict(e) for e in conn.execute('SELECT * FROM job_evidence WHERE job_key=?',(job['job_key'],))]
+            references=[dict(ref) for ref in conn.execute('SELECT listing_url,application_url,last_seen,imported_at FROM source_references WHERE job_id=?',(job_id,))]
+        hard=assess_hard_eligibility(job,evidence,references)
         verdict=assess_requirements(profile,job,evidence)
         if verdict['state']=='FAIL':raise ValueError('confirmed_failed_mandatory_requirements')
         # A recruiter recipient is an email prerequisite, not a portal eligibility gate.
@@ -53,12 +64,14 @@ class BrowserStore:
         if verdict['state']!='PASS' and 'mandatory_requirements' not in missing:missing.append('mandatory_requirements')
         if verdict['state']=='PASS':missing=[m for m in missing if m!='mandatory_requirements']
         job['missing_facts']=json.dumps(missing);job['requirement_assessment']=verdict
-        if require_verified and (verdict['state']!='PASS' or any(job[g]!='PASS' for g in ('india_state','active_state','headcount_state','payroll_state'))):raise ValueError('unknown_eligibility_requires_verification')
+        job['eligibility_assessment']=hard
+        if job['work_mode']=='remote' and hard['gates']['location']['state']=='FAIL':
+            raise ValueError('incompatible_known_remote_country_scope')
+        if require_verified and hard['state']=='FAIL':raise ValueError('confirmed_failed_eligibility_check')
+        if require_verified and hard['state']!='PASS':raise ValueError('unknown_eligibility_requires_verification')
+        if require_verified and verdict['state']!='PASS':raise ValueError('unknown_eligibility_requires_verification')
         if job['status']=='SUBMITTED' or job['lifecycle']=='CLOSED' or job['readiness'] in {'EXCLUDED','ACCESS_BLOCKED'} or job['activity_status']=='CLOSED':
             raise ValueError('incompatible_or_already_applied')
-        if any(job[key]=='FAIL' for key in ('india_state','active_state','headcount_state','payroll_state')):raise ValueError('confirmed_failed_eligibility_check')
-        if job['work_mode']=='remote' and 'india' not in job['location'].casefold() and re.search(r'\b(?:US|United States|Canada|United Kingdom|Europe only)\b',job['location'],re.I):
-            raise ValueError('incompatible_known_remote_country_scope')
         if re.search(r'\bcontract\b|third.party payroll',job['title'],re.I):raise ValueError('confirmed_incompatible_employment')
         if not ats_for(job['application_url'] or ''):raise ValueError('unsupported_ats_route')
         identity=vacancy_identity(job)
@@ -74,6 +87,10 @@ class BrowserStore:
             # Cross-source aliases sharing the same proven employer/requisition.
             for other in conn.execute("SELECT company,application_url FROM jobs WHERE status='SUBMITTED'"):
                 if other['application_url'] and vacancy_identity(other)==identity:raise ValueError('existing_submission_history')
+            closed=conn.execute("""SELECT j.company,j.application_url,j.canonical_application_url
+                FROM jobs j JOIN job_operational_state s ON s.job_id=j.id
+                WHERE j.activity_status='CLOSED' OR s.lifecycle='CLOSED' OR j.status='NOT_RELEVANT'""").fetchall()
+            if any(vacancy_identity(other)==identity for other in closed):raise ValueError('closed_requisition_alias')
             prior=conn.execute("SELECT state FROM browser_applications WHERE identity=?",(identity,)).fetchone()
         if prior and prior['state'] in {'USER_REPORTED_SUBMITTED','SUBMISSION_CONFIRMED'}:raise ValueError('existing_submission_history')
         from .review_queue import hidden_job_ids
@@ -129,8 +146,25 @@ class BrowserStore:
 
     def list(self,batch_id=None,include_history=False):
         with self.db.transaction() as conn:
-            rows=conn.execute('''SELECT a.*,j.company,j.title FROM browser_applications a JOIN jobs j ON j.id=a.job_id
+            rows=conn.execute('''SELECT a.*,j.company,j.title,j.application_url AS vacancy_url,
+                j.canonical_application_url,j.work_mode,j.location,j.activity_status,j.status AS job_status,
+                j.description,j.required_skills,j.required_experience_min,j.required_experience_max,
+                j.experience_scope,j.discovery_detail,
+                s.job_key,s.active_state,s.india_state,s.headcount_state,s.payroll_state,s.lifecycle,s.readiness
+              FROM browser_applications a JOIN jobs j ON j.id=a.job_id
+              JOIN job_operational_state s ON s.job_id=j.id
               WHERE (? IS NULL OR a.batch_id=?) ORDER BY a.updated_at DESC''',(batch_id,batch_id)).fetchall()
+            closed=conn.execute("""SELECT j.company,j.application_url,j.canonical_application_url
+                FROM jobs j JOIN job_operational_state s ON s.job_id=j.id
+                WHERE j.activity_status='CLOSED' OR s.lifecycle='CLOSED' OR j.status='NOT_RELEVANT'""").fetchall()
+            closed_identities={vacancy_identity(row) for row in closed}
+            profile=json.loads(conn.execute('SELECT config FROM candidate_profiles_v2 ORDER BY version DESC LIMIT 1').fetchone()[0])
+            evidence={}
+            for item in conn.execute('SELECT * FROM job_evidence'):
+                evidence.setdefault(item['job_key'],[]).append(dict(item))
+            references={}
+            for ref in conn.execute('SELECT job_id,listing_url,application_url,last_seen,imported_at FROM source_references ORDER BY id'):
+                references.setdefault(ref['job_id'],[]).append(dict(ref))
         from .review_queue import hidden_job_ids
         hidden=set() if include_history else hidden_job_ids(self.db)
         out=[]
@@ -141,15 +175,47 @@ class BrowserStore:
             from .application_state import submission_projection,status_message
             with self.db.transaction() as conn:value.update(submission_projection(conn,value['job_id']))
             value['status_message']=status_message(value)
+            from .eligibility import assess_hard_eligibility
+            from .requirements import assess_requirements
+            hard=assess_hard_eligibility(value,evidence.get(value['job_key'],[]),references.get(value['job_id'],[]))
+            requirements=assess_requirements(profile,value,evidence.get(value['job_key'],[])) if hard['state']=='PASS' else {'state':'UNKNOWN','reasons':['Mandatory requirements cannot pass while hard eligibility gates are unresolved.']}
+            eligibility_states=[hard['state'],requirements['state']]
+            value['eligibility_status']='FAIL' if 'FAIL' in eligibility_states or value['readiness']=='EXCLUDED' or value['lifecycle']=='CLOSED' or value['activity_status']=='CLOSED' else 'CONFLICT' if 'CONFLICT' in eligibility_states else 'PASS' if all(state=='PASS' for state in eligibility_states) else 'UNKNOWN'
+            if vacancy_identity(value) in closed_identities:
+                value['eligibility_status']='FAIL'
+                hard['reasons']=['Vacancy is closed, removed, or aliases a closed requisition.']
+            value['eligibility_gates']={name:{'state':gate['state'],'reason':gate['reason'],'evidence':[{'url':item['evidence_url'],'verified_at':item['verified_at']} for item in gate['evidence']]} for name,gate in hard['gates'].items()}
+            value['eligibility_reasons']=hard['reasons'] if hard['state']!='PASS' else requirements['reasons'] if requirements['state']!='PASS' else []
+            value['source_url']=hard['source_url'] or value['vacancy_url']
+            value['connection_status']='CONNECTED' if value['target_id'] and value['session_health']=='CONNECTED' else 'SESSION_LOST' if value['session_health']=='LOST' else 'INSPECTION_REQUIRED'
+            if value['application_outcome']!='NOT_SUBMITTED':
+                value['next_action']='Review the recorded submission status and evidence; do not create a duplicate application.'
+            elif value['session_health']=='LOST':
+                value['next_action']='Restore the dedicated browser session and inspect existing employer progress before reconstruction.'
+            elif value['eligibility_status']!='PASS':
+                value['next_action']='Resolve the listed eligibility evidence blockers before any application preparation.'
+            elif value['state']=='READY_FOR_USER_REVIEW':
+                value['next_action']='Review the populated employer form and attachments manually; submission remains your action.'
+            elif value['state']=='NEEDS_USER_ANSWER':
+                value['next_action']='Provide the missing required answers for this inspected form.'
+            elif value['state']=='NEEDS_EMPLOYER_CHECK':
+                value['next_action']='Complete the listed employer-specific checks before continuing.'
+            elif value['state']=='PREPARING':
+                value['next_action']='Wait for the current inspection/preparation step, then review its saved progress.'
+            else:
+                value['next_action']='Inspect the current employer form and verify saved progress before continuing.'
             with self.db.transaction() as conn:
                 state=conn.execute('SELECT headcount_state,payroll_state,india_state,active_state FROM job_operational_state WHERE job_id=? LIMIT 1',(value['job_id'],)).fetchone()
             if state:
                 resolved={name for name,column in [('headcount','headcount_state'),('direct_permanent_payroll','payroll_state'),('india_eligible','india_state'),('active','active_state')] if state[column]=='PASS'}
                 value['checks']=[c for c in value['checks'] if c not in resolved]
+            value['ready_for_user_review']=value['application_outcome']=='NOT_SUBMITTED' and value['state']=='READY_FOR_USER_REVIEW' and value['eligibility_status']=='PASS' and not value['missing'] and not value['checks'] and all(document.get('verified') for document in value['documents'])
             # Dashboard gets metadata/questions, not copied private input values.
             value['answer_resolutions']=[{k:f.get(k) for k in ('label','state','explanation')} for f in value['inspection'].get('answer_resolution',{}).get('fields',[])]
             value['inspection']={key:value['inspection'].get(key) for key in ('verified_at','field_count','ats','jd_sha256','error_code','upload_note','stage','answered')}
-            out.append(value)
+            # Browser-facing serialization is opt-in. Internal discovery metadata,
+            # Gmail identifiers, session IDs and confirmation references stay local.
+            out.append({key:value[key] for key in APPLICATION_PUBLIC_FIELDS if key in value})
         return out
 
     def get(self,application_id):

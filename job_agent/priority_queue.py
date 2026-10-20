@@ -57,6 +57,7 @@ def after_evidence_change(db):
 
 def refresh(db):
     from .requirements import assess_requirements
+    from .eligibility import assess_hard_eligibility
     from .browser_store import vacancy_identity,ats_for
     warm_messages(db)
     from .review_queue import hidden_job_ids
@@ -79,19 +80,28 @@ def refresh(db):
         existing={r['job_id']:dict(r) for r in conn.execute('SELECT * FROM application_priority')}
         preparations={r['job_id']:dict(r) for r in conn.execute('SELECT * FROM browser_applications')}
         prepared_identities={r['identity'] for r in preparations.values()}
-        sources={r['job_id']:r['source'] for r in conn.execute('SELECT job_id,source FROM source_references ORDER BY id')}
+        source_rows={}
+        for ref in conn.execute('SELECT job_id,source,listing_url,application_url,last_seen,imported_at FROM source_references ORDER BY id'):
+            source_rows.setdefault(ref['job_id'],[]).append(dict(ref))
+        sources={job_id:refs[0]['source'] for job_id,refs in source_rows.items()}
         submitted={r[0] for r in conn.execute("SELECT job_id FROM status_history WHERE status='SUBMITTED' UNION SELECT job_id FROM browser_applications WHERE application_outcome IN ('USER_REPORTED_SUBMITTED','SUBMISSION_CONFIRMED') OR state IN ('USER_REPORTED_SUBMITTED','SUBMISSION_CONFIRMED') UNION SELECT a.job_id FROM browser_events e JOIN browser_applications a ON a.id=e.application_id WHERE json_extract(e.details,'$.state') IN ('USER_REPORTED_SUBMITTED','SUBMISSION_CONFIRMED')")}
         submitted_identities={vacancy_identity(j) for j in rows if (j['id'] in submitted or j['status']=='SUBMITTED') and j['company'] and ats_for(j['application_url'] or '')}
+        closed_identities={vacancy_identity(j) for j in rows if (j['activity_status']=='CLOSED' or j['lifecycle']=='CLOSED' or j['status']=='NOT_RELEVANT') and j['company'] and ats_for(j['application_url'] or '')}
         decisions=[];identities=set()
         for job in rows:
             prior=existing.get(job['id']);app=preparations.get(job['id']);identity=vacancy_identity(job)
             if prior and prior['state']=='RESERVED':continue
-            hard=[job[g] for g in ('active_state','india_state','headcount_state','payroll_state')]
-            assessment=assess_requirements(profile,job,evidence.get(job['job_key'],[])) if all(v=='PASS' for v in hard) else {'state':'UNKNOWN','reasons':['Independent eligibility gates are unresolved or failed.']}
-            eligibility='FAIL' if 'FAIL' in hard or assessment['state']=='FAIL' or job['readiness']=='EXCLUDED' or job['lifecycle']=='CLOSED' else 'PASS' if all(v=='PASS' for v in hard) and assessment['state']=='PASS' else 'UNKNOWN'
+            hard=assess_hard_eligibility(job,evidence.get(job['job_key'],[]),source_rows.get(job['id'],[]))
+            assessment=assess_requirements(profile,job,evidence.get(job['job_key'],[])) if hard['state']=='PASS' else {'state':'UNKNOWN','reasons':['Mandatory requirements cannot pass while hard eligibility gates are unresolved.']}
+            if job['activity_status']=='CLOSED' or job['lifecycle']=='CLOSED' or job['status']=='NOT_RELEVANT' or identity in closed_identities:
+                hard['state']='FAIL';hard['reasons']=['Vacancy is closed, removed, or aliases a closed requisition.']
+            states=[hard['state'],assessment['state']]
+            eligibility='FAIL' if 'FAIL' in states or job['readiness']=='EXCLUDED' else 'CONFLICT' if 'CONFLICT' in states else 'PASS' if all(value=='PASS' for value in states) else 'UNKNOWN'
             if eligibility=='PASS' and not (job['company'] and job['title'] and job['application_url']):eligibility='UNKNOWN'
             state='PENDING' if eligibility=='PASS' else 'EXCLUDED' if eligibility=='FAIL' else 'VERIFICATION'
-            reason='Verified fit descending; deadline, freshness and stable job ID break ties.' if state=='PENDING' else 'Verification required: '+', '.join(g for g in ('active_state','india_state','headcount_state','payroll_state') if job[g]!='PASS')+'; '+str(assessment['reasons'][0] if assessment.get('reasons') else assessment['state'])
+            blockers=hard['reasons'] if hard['state']!='PASS' else assessment.get('reasons',[])
+            if eligibility=='FAIL' and not blockers: blockers=['Vacancy is closed, removed, or explicitly excluded.']
+            reason='Verified fit descending; deadline, freshness and stable job ID break ties.' if state=='PENDING' else 'Verification required: '+'; '.join(blockers or [assessment['state']])
             if job['id'] in submitted or job['status']=='SUBMITTED' or identity in submitted_identities:state='SUBMITTED'
             elif job['id'] in hidden:state='SUPPRESSED';reason='Unavailable or removed from active review; history retained.'
             elif (app or identity in prepared_identities) and eligibility=='PASS':state='REVIEW_REQUIRED' if prior and prior['state']=='REVIEW_REQUIRED' else 'EXISTING_PROGRESS'
@@ -103,7 +113,7 @@ def refresh(db):
             recruiter=sorted(contacts.get(job['job_key'],[]),key=lambda m:(-m['tier'],m['deadline'] or '9999'))
             tier=recruiter[0]['tier'] if recruiter else 0;deadline=recruiter[0]['deadline'] if recruiter else None
             if tier:reason='Verified recruiter-linked opportunity: '+recruiter[0]['reason']+'. '+reason
-            fingerprint=digest([profile,job,assessment,contacts.get(job['job_key'],[])])
+            fingerprint=digest([profile,job,hard,assessment,contacts.get(job['job_key'],[])])
             decisions.append((job['id'],identity,state,float(job['match_score']),tier,deadline,job.get('published_at'),sources.get(job['id'],'unknown'),reason,eligibility,fingerprint,prior['queued_at'] if prior else now(),prior['last_processed'] if prior else (app.get('last_sync_at') or app.get('updated_at')) if app else None,now()))
         conn.executemany('''INSERT INTO application_priority(job_id,identity,state,fit,recruiter_tier,deadline,freshness,source,reason,eligibility,evidence_hash,queued_at,last_processed,updated_at) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?)
           ON CONFLICT(job_id) DO UPDATE SET identity=excluded.identity,state=excluded.state,fit=excluded.fit,recruiter_tier=excluded.recruiter_tier,deadline=excluded.deadline,freshness=excluded.freshness,source=excluded.source,reason=excluded.reason,eligibility=excluded.eligibility,evidence_hash=excluded.evidence_hash,updated_at=excluded.updated_at''',decisions)

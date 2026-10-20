@@ -1,6 +1,38 @@
 # Shared AI handoff: verification ledger
 
-Recorded: 2026-10-19. Keep observed results, historical reports and unrun checks distinct. The shared baseline is `6e195c8c9ec265f8bcd9628d44c68d0e4f17fcbb`. Documentation changes in this setup do not constitute a new application test run.
+Recorded: 2026-10-20. Keep observed results, historical reports and unrun checks distinct. The shared baseline is `6e195c8c9ec265f8bcd9628d44c68d0e4f17fcbb`. Documentation changes in this setup do not constitute a new application test run.
+
+## Current local application-recovery/eligibility milestone
+
+Observed in the current Windows workspace on base branch `main`, HEAD `e94340d61ee88aea137a878ad1e48ca860f3e60f`, with the implementation and test changes uncommitted. All database and browser work in this section used synthetic fixtures; no live employer, production database, Gmail or current application state was accessed.
+
+| Exact command | Result |
+|---|---|
+| `.venv\Scripts\python.exe -m pytest tests\test_requirement_completeness.py tests\test_eligibility.py -q -p no:cacheprovider -o addopts='' --basetemp=data\publication-blockers-focused` | 99 passed; validates the seven-day requirement-evidence boundary and rejects missing, HTTP, file, JavaScript, malformed and credential-bearing requirement-source URLs; one existing Starlette/httpx deprecation warning |
+| `.venv\Scripts\python.exe -m pytest -q -p no:cacheprovider --basetemp=data\publication-blockers-full-python` | 583 passed; 91.94% aggregate coverage; one existing Starlette/httpx deprecation warning |
+| `npm.cmd run test:e2e -- --output=data\publication-blockers-playwright --reporter=list` | 157 passed in 2.9 minutes using the disposable local fixture server |
+| `npm.cmd run test:e2e:r1 -- --output=data\r1-termination-fix-1 --reporter=list` | 1 passed in 30.0 seconds |
+| `npm.cmd run test:e2e:r1 -- --output=data\r1-termination-fix-2 --reporter=list` | 1 passed in 28.7 seconds |
+| `npm.cmd run test:e2e:r1 -- --output=data\r1-termination-fix-3 --reporter=list` | 1 passed in 28.8 seconds |
+| `npm.cmd run test:e2e:r1 -- --output=data\r1-termination-fix-4 --reporter=list` | 1 passed in 35.0 seconds |
+| `.venv\Scripts\python.exe -m pytest tests\test_r1_reliability.py tests\test_r1_workers_and_migration.py tests\test_workflow_guard.py tests\test_m4.py -q -p no:cacheprovider -o addopts='' --basetemp=data\r1-lifecycle-python` | 40 passed; one existing Starlette/httpx deprecation warning |
+| `npm.cmd run test:e2e:r2 -- --output=data\r1-termination-r2 --reporter=list` | 2 passed in 18.1 seconds |
+| `.venv\Scripts\python.exe -m pytest tests\test_requirement_completeness.py tests\test_eligibility.py tests\test_employer_evidence.py tests\test_m4.py tests\test_browser_applications.py tests\test_priority_queue.py -q -p no:cacheprovider -o addopts='' --basetemp=data\codex-f1-f8-focused-3` | 159 passed; one existing Starlette/httpx deprecation warning |
+| `.venv\Scripts\python.exe -m pytest -q -p no:cacheprovider --basetemp=data\codex-f1-f8-full-python-final` | 576 passed; 91.94% aggregate coverage; one existing Starlette/httpx deprecation warning |
+| `npm.cmd run test:e2e -- --output=data\codex-f1-f8-playwright-final --reporter=list` | 157 passed in 2.7 minutes |
+| `npm.cmd run test:e2e:r1 -- --output=data\codex-f1-f8-r1 --reporter=list` | 1 failed: synthetic held worker did not terminate within 10 seconds; operation remained `RUNNING` instead of `INTERRUPTED` |
+| `npm.cmd run test:e2e:r1 -- --output=data\codex-f1-f8-r1-rerun --reporter=list` | Same single failure reproduced; disposable worker lock remained held during temporary-directory cleanup |
+| `npm.cmd run test:e2e:r2 -- --output=data\codex-f1-f8-r2-final --reporter=list` | 2 passed in 17.4 seconds |
+| `.venv\Scripts\python.exe -m pytest -q --basetemp=data\milestone-full-python` | 529 passed; 91.84% aggregate line coverage; 509.62s |
+| `.venv\Scripts\python.exe -m pytest tests\test_eligibility.py tests\test_employer_evidence.py tests\test_release_step1.py -q -o addopts='' --cov=job_agent.eligibility --cov=job_agent.employer_evidence --cov-report=term-missing --cov-fail-under=90 --basetemp=data\milestone-coverage-focused` | 29 passed; targeted coverage gate passed; eligibility 96%, employer evidence 100% |
+| `npx.cmd playwright test --config=playwright.privacy.config.ts e2e\live-workflow-repair.spec.ts` | 4 passed; source/progress outage isolation, answer modal draft preservation and stale-ready suppression |
+| `npm.cmd run test:e2e` | 156 passed in 4.7 minutes; one initial test-fixture timeout was corrected by supplying the newly required eligibility projection, then the full suite passed |
+| `npm.cmd run test:e2e:r1` | 1 passed in 1.4 minutes; R1 synthetic fixture now supplies sourced eligibility facts and simulates a missing headcount evidence row rather than changing only a stale status flag |
+| `npm.cmd run test:e2e:r2` | 2 passed in 29.1s |
+
+Coverage in the latest full Python run for changed modules: `eligibility.py` 96%, `employer_evidence.py` 100%, `requirement_clauses.py` 100%, `m2d.py` 98%, `priority_queue.py` 94%, `browser_store.py` 97%. The post-audit correction added seven requirement-source URL cases, raising the full Python count from the preceding 576 to 583 without changing aggregate coverage. No tests were skipped or assertions suppressed. R1 root cause was fixture-only: Windows denied the fixture's external `taskkill` command, its nonzero result was ignored, and `process.wait` timed out. The fixture now terminates its owned `Popen` handle directly and does not create a Chrome child for the deliberate hold case. Production lease expiry and durable `INTERRUPTED` recovery were unchanged. Four consecutive R1 runs passed after the correction.
+
+These results verify local deterministic behavior only. They do not establish that any real vacancy is eligible, that the previously tracked applications are currently reviewable, that five eligible opportunities exist, or that any live ATS form is accepted. The approved freshness windows are 7 days for vacancy evidence and 90 days for employer evidence.
 
 ## Historical local Windows evidence
 

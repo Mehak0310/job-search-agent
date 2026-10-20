@@ -14,7 +14,7 @@ from job_agent.gmail_local import GmailDraftAdapter,DRAFT_SCOPE
 
 def setup_engine(tmp_path,readiness="READY"):
     db=Database(tmp_path/"state.sqlite3");service=JobService(db);__import__('tests.synthetic_profile',fromlist=['seed']).seed(db)
-    service.import_rows([JobInput(source="fixture",source_job_id="role-1",company="Example Corp",title="Senior Frontend Engineer",location="Noida",work_mode="hybrid",description="React TypeScript leadership",skills=["react","typescript","graphql"],application_url="https://example.com/jobs/role-1",min_experience=5,max_experience=8,is_sample=True)])
+    service.import_rows([JobInput(source="fixture",source_job_id="role-1",company="Example Corp",title="Senior Frontend Engineer",location="Noida, India",work_mode="hybrid",description="React TypeScript leadership",skills=["react","typescript","graphql"],application_url="https://example.com/jobs/role-1",min_experience=5,max_experience=8,is_sample=True)])
     with db.transaction() as conn:
         row=conn.execute("SELECT config FROM candidate_profiles_v2 WHERE id=1").fetchone();profile=json.loads(row[0]);profile["confirmed_facts"]={"notice_period":"45 days; not serving","expected_compensation":"42 LPA; not a hard minimum"};conn.execute("UPDATE candidate_profiles_v2 SET config=? WHERE id=1",(json.dumps(profile),))
     m2d=M2DEngine(db);m2d.seed();m2d.sync_existing_jobs()

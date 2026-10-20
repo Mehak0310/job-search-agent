@@ -79,7 +79,72 @@ def test_bounded_verification_reports_resolved_and_blocked_work(tmp_path):
     m.seed_verification_tasks();result=m.execute_verification_tasks(limit=10)
     assert result['attempted']>=2 and result['resolved']==0 and result['deferred']>=1 and result['blocked']>=1
     with db.transaction() as conn:
-        assert conn.execute("SELECT state FROM job_evidence WHERE job_key=? AND kind='mandatory_requirements'",(key,)).fetchone()[0]=='UNKNOWN'
+        assert conn.execute("SELECT count(*) FROM job_evidence WHERE job_key=? AND kind='mandatory_requirements'",(key,)).fetchone()[0]==0
+        assert conn.execute("SELECT state FROM requirement_assessments WHERE job_id=? ORDER BY created_at DESC LIMIT 1",(key,)).fetchone()[0]=='UNKNOWN'
     with db.transaction() as conn:
         blocked=conn.execute("SELECT checkpoint,blocker FROM m2d_tasks WHERE kind='VERIFICATION' AND status='BLOCKED' LIMIT 1").fetchone()
     assert blocked['blocker'] and json.loads(blocked['checkpoint'])['retry_condition']
+
+
+def test_verification_tasks_do_not_refresh_historical_hard_evidence(tmp_path, monkeypatch):
+    from datetime import datetime, timedelta, timezone
+    import job_agent.m2d as m2d_module
+
+    fixed_now = datetime(2026, 10, 19, 12, tzinfo=timezone.utc)
+    monkeypatch.setattr(m2d_module, 'now', lambda: fixed_now.isoformat())
+    cases = (
+        ('active', 'active', 'Vacancy is active and open for applications.', 8),
+        ('india_eligible', 'india_eligible', 'Employer explicitly supports employment in India.', 91),
+        ('headcount', 'headcount', 'Global workforce of 5,000 employees.', 91),
+        ('direct_permanent_payroll', 'direct_permanent_payroll', 'Employees are hired directly on permanent full-time payroll.', 91),
+    )
+    for fact, kind, factual, stale_days in cases:
+        case_path = tmp_path / fact
+        case_path.mkdir()
+        db, _, key = setup_engine(case_path)
+        engine = M2DEngine(db)
+        original = (fixed_now - timedelta(days=stale_days)).isoformat()
+        url = 'https://careers.example.test/source'
+        engine.record_evidence(key, kind, 'PASS', factual=factual, evidence_url=url, verified_at=original)
+        engine.set_operational_state(
+            key,
+            OperationalFacts(
+                active=TriState.PASS,
+                india_eligible=TriState.PASS,
+                headcount=TriState.PASS,
+                direct_permanent_payroll=TriState.PASS,
+                mandatory_requirements=TriState.UNKNOWN,
+                work_mode='hybrid',
+            ),
+            job_id=key,
+        )
+        engine.enqueue(
+            kind='VERIFICATION',
+            source_id=None,
+            stream='PIPELINE',
+            category=fact.upper(),
+            job_key=key,
+            payload={'fact': fact},
+        )
+
+        result = engine.execute_verification_tasks(limit=1)
+        with db.transaction() as conn:
+            saved = conn.execute(
+                'SELECT state,observed_at,verified_at FROM job_evidence WHERE job_key=? AND kind=?',
+                (key, kind),
+            ).fetchone()
+            state_column = {
+                'active': 'active_state',
+                'india_eligible': 'india_state',
+                'headcount': 'headcount_state',
+                'direct_permanent_payroll': 'payroll_state',
+            }[fact]
+            operational = conn.execute(
+                f'SELECT {state_column} FROM job_operational_state WHERE job_key=?',
+                (key,),
+            ).fetchone()[0]
+        assert result['blocked'] == 1
+        assert saved['state'] == 'PASS'
+        assert saved['observed_at'] == original
+        assert saved['verified_at'] == original
+        assert operational == 'UNKNOWN'

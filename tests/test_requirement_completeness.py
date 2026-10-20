@@ -1,4 +1,5 @@
 import hashlib,json,sqlite3
+from datetime import datetime,timedelta,timezone
 import pytest
 from job_agent.requirements import assess_requirements,persist_assessment
 from tests.test_browser_applications import prepared_store
@@ -6,7 +7,34 @@ from tests.test_browser_applications import prepared_store
 PROFILE={'version':7,'reviewed':True,'professional_skills':['react','typescript'],'total_experience_years':7,'fact_provenance':{'total_experience_years':[{'source':'approved profile'}]}}
 
 def full_job(description='Requirements\nReact and TypeScript are required.',**extra):
-    return {'description':description,'discovery_detail':json.dumps({'requirements_source':{'content_status':'FULL','source_url':'https://example.com/current-vacancy','description_sha256':hashlib.sha256(description.encode()).hexdigest(),'retrieval_version':'isolated-approved-fixture'}}),**extra}
+    return {'description':description,'discovery_detail':json.dumps({'requirements_source':{'content_status':'FULL','source_url':'https://example.com/current-vacancy','description_sha256':hashlib.sha256(description.encode()).hexdigest(),'retrieval_version':'isolated-approved-fixture','verified_at':datetime.now(timezone.utc).isoformat()}}),**extra}
+
+
+def test_requirement_source_freshness_is_exact_and_fail_closed():
+    from job_agent.requirement_clauses import inventory
+    at=datetime(2026,10,20,12,tzinfo=timezone.utc);role=full_job('Requirements\nReact is required.')
+    detail=json.loads(role['discovery_detail'])
+    cases=((at-timedelta(days=7)).astimezone(timezone(timedelta(hours=5,minutes=30))).isoformat(),True),((at-timedelta(days=7,seconds=1)).isoformat(),False),((at+timedelta(seconds=1)).isoformat(),False),('malformed',False),(None,False)
+    for stamp,complete in cases:
+        detail['requirements_source']['verified_at']=stamp;role['discovery_detail']=json.dumps(detail)
+        assert (not inventory(role,at=at)['completeness_issues']) is complete
+
+
+@pytest.mark.parametrize(('source_url','complete'),[
+    ('https://example.com/current-vacancy',True),
+    (None,False),
+    ('http://example.com/current-vacancy',False),
+    ('file:///private/job-description.html',False),
+    ('javascript:alert(1)',False),
+    ('not a valid URL',False),
+    ('https://user:password@example.com/current-vacancy',False),
+])
+def test_requirement_source_requires_credential_free_https(source_url,complete):
+    from job_agent.requirement_clauses import inventory
+    at=datetime(2026,10,20,12,tzinfo=timezone.utc);role=full_job('Requirements\nReact is required.')
+    detail=json.loads(role['discovery_detail']);detail['requirements_source']['source_url']=source_url
+    detail['requirements_source']['verified_at']=at.isoformat();role['discovery_detail']=json.dumps(detail)
+    assert (not inventory(role,at=at)['completeness_issues']) is complete
 
 
 def test_fully_mapped_grounded_mandatory_clauses():

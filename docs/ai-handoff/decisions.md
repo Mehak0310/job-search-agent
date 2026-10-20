@@ -1,6 +1,13 @@
 # Shared AI handoff: decisions
 
-Recorded: 2026-10-19. Dates below are recording dates unless an original source date is given. This is an index of existing decisions and user instructions, not new product approval. Supersession must name the replacing decision and supporting approval; preserve historical entries.
+Recorded: 2026-10-20. Dates below are recording dates unless an original source date is given. This is an index of existing decisions and user instructions, not new product approval. Supersession must name the replacing decision and supporting approval; preserve historical entries.
+
+## Current local milestone additions
+
+| ID | Date | Decision and authority | Status / supersession |
+|---|---|---|---|
+| D09 | 2026-10-20 | User explicitly authorized local implementation and synthetic validation for application recovery, deterministic eligibility, Applications review state and a partial batch of up to five. The same request prohibits commit/push, production database changes, service restart, employer/Gmail actions, upload/submission and schedule changes. | Active for this local milestone only. No authority for live verification or publication. |
+| D10 | 2026-10-20 | User approved the evidence-freshness policy for this milestone: vacancy activity and vacancy/requirements evidence are current for 7 days; employer headcount, India-employment and payroll evidence are current for 90 days. Missing, stale, future-dated, conflicting or unverifiable evidence remains `NEEDS_VERIFICATION`; reuse preserves the original source verification timestamp. | Active approved policy. Do not synthesize timestamps or treat verification-task execution as a source check. |
 
 | ID | Date | Decision and authority | Status / supersession |
 |---|---|---|---|
@@ -10,7 +17,7 @@ Recorded: 2026-10-19. Dates below are recording dates unless an original source 
 | D04 | 2026-10-19 | Six tabs and their proposed presentation are defined in the [design contract](../command-center-design-contract.md). Use persisted data for implementation, preserve guarded APIs, and require screenshot review. See [redesign plan](../../specs/command-center-redesign-plan.md). | Proposed visual baseline; explicit design approval pending. Supersedes any blanket claim that R3 functional verification establishes visual acceptance. |
 | D05 | 2026-10-19 | Preserve the existing 90% Python coverage gate, Windows behavior and meaningful failing tests. Fix Linux portability in a separate authorized task; do not skip tests or lower the gate to achieve green. Authority: user handoff request and [project test configuration](../../pyproject.toml). | Active; Linux coverage failure remains visible. |
 | D06 | 2026-10-19 | All AI collaborators read the four handoff files and AGENTS, verify branch/HEAD, work only within explicit authorization, and record exact checks and unfinished work. Recheck newer changes before editing/publishing; use dedicated branches or an approved PR workflow for concurrency. | Active user instruction; no independent conflicting pushes to `main`. |
-| D07 | 2026-10-19 | Do not commit, push, create a PR, merge, force-push, deploy, send mail, submit applications or activate schedules without explicit approval. This setup changes documentation only; P1/P2/P3 remain unstarted. | Active user instruction; separate approvals required. |
+| D07 | 2026-10-19 | Do not commit, push, create a PR, merge, force-push, deploy, send mail, submit applications or activate schedules without explicit approval. The original documentation-only scope is historical; D09 authorizes only its stated local milestone, not publication or live actions. | Active user instruction; separate approvals required. |
 | D08 | 2026-10-19 | Treat source publication, isolated verification, production activation and visual acceptance as distinct states. User reports the R1/R2/R3 checkpoint published and production backend not restarted for the privacy refactor. | Current coordination status supersedes older publication-pending handoff text only; no production readiness or activation claim. |
 
 The [existing decision log](../../specs/decision-log.md) retains milestone history. Its historical browser-unavailable and earlier concurrency statements are not current verification results; use later milestone specifications and the [verification ledger](verification.md) for their scope. An approval not evidenced in the source or user instructions remains pending.

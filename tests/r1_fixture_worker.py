@@ -28,6 +28,12 @@ def main():
         return '<h1>R1 Frontend '+str(index)+'</h1><p>Requirements: React and TypeScript. Build accessible frontend components and test interfaces. '+('Documented fixture responsibilities. '*12)+'</p><form><label>Full name<input id="name" required></label><label>Email<input id="email" type="email" required></label>'+extra+upload+'<button type="submit">Submit application</button></form><script>window.submits=0;document.querySelector("form").onsubmit=e=>{window.submits++;e.preventDefault()};if(window.resume)resume.onchange=async()=>{await fetch("https://grnhse-prod-jben-us-west-2.s3.us-west-2.amazonaws.com/",{method:"POST",body:new FormData()});filename.textContent=resume.files[0].name;};</script>'
     @contextmanager
     def connection():
+        # The held-worker case tests lease recovery after process loss. It never
+        # reaches browser work, so do not create a Chrome child that abrupt fixture
+        # termination would orphan.
+        if args.hold:
+            yield None
+            return
         with sync_playwright() as p:
             browser=p.chromium.launch(channel='chrome',headless=True);context=browser.new_context()
             def respond(route):
@@ -47,7 +53,7 @@ def main():
             while True:time.sleep(.2)
         index=int(item['url'].rsplit('/',1)[1])%10
         if index==4:
-            with db.transaction() as conn:conn.execute("UPDATE job_operational_state SET headcount_state='UNKNOWN' WHERE job_id=?",(item['job_id'],))
+            with db.transaction() as conn:conn.execute("DELETE FROM job_evidence WHERE job_key=? AND kind='headcount'",(item['job_id'],))
         if index==2:store.update(item['id'],target_id='nonexistent-fixture-target')
         runner.prepare_one(store,store.get(item['id']),browser,metadata,allow_upload)
         with store.db.transaction() as conn:

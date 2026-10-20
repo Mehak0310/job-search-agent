@@ -2,6 +2,34 @@
 
 Diagnosis and repair started from the existing committed checkpoint. No repair commit, push, deployment, schedule activation, email or submission is authorized.
 
+## Successor milestone: local recovery, eligibility and review queue
+
+Base: `main` at `e94340d61ee88aea137a878ad1e48ca860f3e60f`; changes remain uncommitted. This section records local implementation and synthetic validation only. It does not update or revalidate the earlier production/runtime checkpoint below.
+
+### Implemented
+
+- Shared deterministic hard-gate assessment now requires recent HTTPS-sourced evidence for vacancy activity, India employment, employer size and direct/permanent payroll. Evidence records that are stale, missing, contradictory, unsupported or out of scope remain `UNKNOWN`, `CONFLICT` or `FAIL`, never a pass.
+- Retained the specified headcount thresholds in both direct and cached checks: 1,000 employees for non-remote and 500 for remote. Cached evidence keeps its original verification timestamp rather than being made fresh by reuse.
+- Require recent sourced vacancy references and an approved India location; exclude closed requisitions and aliases. Queue and browser-preparation paths use the same hard assessment. Batches remain capped at five but return fewer when fewer candidates qualify.
+- Applications cards now surface the vacancy source, eligibility status and blockers, connection state, saved progress, missing answers, documents and next safe action. A saved `READY_FOR_USER_REVIEW` state is not displayed or filtered as ready while current eligibility, answers, checks or attachments remain unresolved.
+- Isolate progress and Sources request failures from saved application cards; an answer dialog remains outside the replaced card list during polling.
+
+### Verified (synthetic/local)
+
+- `.venv\Scripts\python.exe -m pytest -q --basetemp=data\milestone-full-python`: **529 passed**, **91.84% aggregate coverage**, 509.62s.
+- Changed Python module coverage in that run: `eligibility.py` **96%**, `employer_evidence.py` **100%**, `priority_queue.py` **94%**, `browser_store.py` **97%**.
+- `.venv\Scripts\python.exe -m pytest tests\test_eligibility.py tests\test_employer_evidence.py tests\test_release_step1.py -q -o addopts='' --cov=job_agent.eligibility --cov=job_agent.employer_evidence --cov-report=term-missing --cov-fail-under=90 --basetemp=data\milestone-coverage-focused`: **29 passed**, focused coverage gate passed.
+- `npx.cmd playwright test --config=playwright.privacy.config.ts e2e\live-workflow-repair.spec.ts`: **4 passed**, including Sources/progress failure isolation, answer-dialog draft preservation and stale-ready suppression.
+- `npm.cmd run test:e2e`: **156 passed** in 4.7 minutes. An initial full run had one timeout because an existing synthetic test row omitted the newly required eligibility projection; the fixture was corrected and the full rerun passed.
+- The focused recovery/eligibility regression command passed **140 tests** before two additional pure eligibility cases were added; the full Python run above includes those cases.
+
+### Blocked / not established
+
+- This task did not inspect production SQLite, reconnect to Chrome, re-open employer pages, or check whether any current vacancy satisfies the gates. No four-application reviewability or five-candidate success is claimed.
+- Employer-specific work authorization, current employer facts, cross-portal alias equivalence beyond stable requisition identities, live ATS form read-back, production activation and visual acceptance remain unverified.
+- The approved freshness policy is 7 days for vacancy activity and requirements evidence, and 90 days for employer headcount, India-employment and payroll evidence.
+- All tests are synthetic. They are not live employer-form acceptance.
+
 ## Implemented
 
 - Account for submitted history and awaiting-inspection states in the five-application summary.

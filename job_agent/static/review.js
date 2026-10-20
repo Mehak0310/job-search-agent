@@ -42,14 +42,17 @@ async function refreshBrowser(){
 async function renderBrowserState(){
  const renderVersion=++browserRenderVersion;
  clearTimeout(reviewTimer);
- const [rows,progress]=await Promise.all([api('/api/browser/applications'+($('browser-history').checked?'?include_history=true':'')),api('/api/browser/progress')]);
+ const [rowsResult,progressResult]=await Promise.allSettled([api('/api/browser/applications'+($('browser-history').checked?'?include_history=true':'')),api('/api/browser/progress')]);
+ if(rowsResult.status==='rejected')throw rowsResult.reason;
+ const rows=rowsResult.value;
+ const progress=progressResult.status==='fulfilled'?progressResult.value:{batches:[],operations:[],documents:[],work_active:false};
  if(renderVersion!==browserRenderVersion)return;
  const batches=progress.batches||[];
  if(Object.hasOwn(progress,'active_batch_id'))activeReviewBatch=progress.active_batch_id;
  else if(!activeReviewBatch)activeReviewBatch=(batches.find(b=>['QUEUED','RUNNING'].includes(b.status))||batches[0])?.id;
  const batch=batches.find(b=>b.id===activeReviewBatch);
  $('document-availability').textContent=(progress.documents||[]).map(d=>`${d.name}: ${d.available?'approved PDF available':'file unavailable; please attach the approved PDF'}`).join(' | ');
- $('browser-progress').textContent=batch?`Current review batch: ${batch.processed} of ${batch.total} processed; ${batch.ready} ready for your review; ${batch.needs_answers} need answers; ${batch.agent_checks} need agent checks; ${batch.submitted||0} marked submitted (see history); ${batch.preparing||0} preparing.`:rows.length?`${rows.length} tracked applications. ${rows.filter(r=>r.state==='PREPARING').length} preparing.`:'No browser forms prepared yet.';
+ $('browser-progress').textContent=progressResult.status==='rejected'?'Saved applications are shown; live batch progress is temporarily unavailable. '+progressResult.reason:batch?`Current review batch: ${batch.processed} of ${batch.total} processed; ${batch.ready} ready for your review; ${batch.needs_answers} need answers; ${batch.agent_checks} need agent checks; ${batch.submitted||0} marked submitted (see history); ${batch.preparing||0} preparing.`:rows.length?`${rows.length} tracked applications. ${rows.filter(r=>r.state==='PREPARING').length} preparing.`:'No browser forms prepared yet.';
  const busy=progress.work_active||batch&&['QUEUED','RUNNING'].includes(batch.status);if(busy&&batch)observedReviewBatches.add(batch.id);
  const operation=(progress.operations||[]).find(w=>['QUEUED','RUNNING'].includes(w.state));
  if(operation)$('browser-progress').textContent+=` ${operation.phase}. Last heartbeat: ${formatCheckpoint(operation.heartbeat_at)}.`;
@@ -64,8 +67,18 @@ async function renderBrowserState(){
  for(const [index,row] of ordered.entries()){
    const card=text('article','','job');card.dataset.applicationId=row.id;const unavailable=['vacancy_http_404','vacancy_http_410','vacancy_closed'].includes(row.inspection.error_code);
    for(const resolution of row.answer_resolutions||[])card.append(text('p',`${resolution.label}: ${resolution.state.replaceAll('_',' ')} - ${resolution.explanation}`));
-  card.append(text('h3',`${row.company} | ${row.title}`),text('strong',unavailable?'No longer accepting applications':row.status_message||(row.state==='SESSION_LOST'?'Browser session lost; application history preserved':row.state.replaceAll('_',' ')),'chip review-state state-'+row.state));
-   if(row.session_health)card.append(text('p',`Browser: ${row.session_health.toLowerCase()} | ${row.completed_fields||0} fields completed | ${row.phase||'Awaiting inspection'}`));
+   const outcome=row.application_outcome||row.state;
+   const submitted=['USER_REPORTED_SUBMITTED','SUBMISSION_CONFIRMED'].includes(outcome);
+   const unsafeReady=!submitted&&row.state==='READY_FOR_USER_REVIEW'&&!row.ready_for_user_review;
+   const submittedLabel=outcome==='USER_REPORTED_SUBMITTED'?'Marked submitted manually; not independently verified':'Submission confirmed by recorded employer evidence';
+   const stateLabel=submitted?(row.submission_label||row.status_message||submittedLabel):unsafeReady?'Prepared form retained; eligibility must be reverified':row.status_message||(row.state==='SESSION_LOST'?'Browser session lost; application history preserved':row.state.replaceAll('_',' '));
+   const visibleState=submitted?outcome:unsafeReady?'NEEDS_VERIFICATION':row.state;
+   card.append(text('h3',`${row.company} | ${row.title}`),text('strong',unavailable?'No longer accepting applications':stateLabel,'chip review-state state-'+visibleState));
+   card.append(text('p',`Eligibility: ${row.eligibility_status||'UNKNOWN'}`,'eligibility-status'));
+   if(row.eligibility_reasons?.length)card.append(bulletSection('Eligibility blockers',row.eligibility_reasons));
+   const vacancy=applicationLink(row.source_url||row.vacancy_url,'Source vacancy');if(vacancy)card.append(vacancy);
+   if(row.connection_status)card.append(text('p',`Browser session: ${row.connection_status.toLowerCase()} | ${row.completed_fields||0} fields completed | ${row.phase||'Awaiting inspection'}`));
+   if(row.next_action)card.append(text('p','Next safe action: '+row.next_action,'manual'));
    if(row.retry_condition)card.append(text('p',row.retry_condition,'manual'));
    if(row.inspection.error_code)card.append(text('p','Last inspection blocker: '+row.inspection.error_code,'manual'));
    if(row.session_health==='LOST'&&!row.retry_condition)card.append(text('p','Next action: restore the dedicated Chrome session and refresh progress. Check existing employer progress before reconstruction; do not repeat uploads.','manual'));
@@ -81,9 +94,9 @@ async function renderBrowserState(){
    card.append(actions);
    const details=document.createElement('details');details.className='review-tools';details.open=expanded.has(row.id);details.append(text('summary','Troubleshooting and manual history'));
    const tools=text('div','','job-actions');const link=applicationLink(row.url,'Direct application');if(link&&!unavailable)tools.append(link);
-   for(const [label,action] of [['Reinspect form / confirmation','inspect'],['Fill newly supported answers','resume']]){const button=text('button',label,'secondary');button.disabled=action==='resume'&&['SESSION_LOST','USER_REPORTED_SUBMITTED','SUBMISSION_CONFIRMED'].includes(row.state);button.addEventListener('click',()=>guarded(async()=>{await api('/api/browser/applications/'+row.id+'/'+action,{method:'POST'});message(action==='inspect'?'Form inspection completed.':'Preparation started.');await refreshBrowser();}));tools.append(button);}
+   for(const [label,action] of [['Reinspect form / confirmation','inspect'],['Fill newly supported answers','resume']]){const button=text('button',label,'secondary');button.disabled=action==='resume'&&(!row.ready_for_user_review&&row.eligibility_status!=='PASS'||submitted||['SESSION_LOST','USER_REPORTED_SUBMITTED','SUBMISSION_CONFIRMED'].includes(row.state));button.addEventListener('click',()=>guarded(async()=>{await api('/api/browser/applications/'+row.id+'/'+action,{method:'POST'});message(action==='inspect'?'Form inspection completed.':'Preparation started.');await refreshBrowser();}));tools.append(button);}
    if(row.state==='SESSION_LOST'){const rebuild=text('button','Reconstruct after progress review','secondary');rebuild.addEventListener('click',()=>guarded(async()=>{if(!window.confirm('Have you checked existing employer progress and application history, and confirmed reconstruction will not duplicate an application?'))return;await api('/api/browser/batches',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({job_ids:[row.job_id],limit:1,reconstruct_after_progress_review:true})});await refreshBrowser();}));tools.append(rebuild);}
-   const reported=text('button','I submitted this application','secondary');reported.disabled=['USER_REPORTED_SUBMITTED','SUBMISSION_CONFIRMED'].includes(row.state);reported.addEventListener('click',()=>guarded(async()=>{await api('/api/browser/applications/'+row.id+'/reported-submitted',{method:'POST'});message('Recorded as user-reported; no confirmed submission evidence was inferred.');await Promise.all([refreshBrowser(),refreshM3(),refreshRecommendations(),refresh()]);}));tools.append(reported);if(row.job_id)tools.append(unavailableButton(row.job_id));details.append(tools);card.append(details);(index<5?$('browser-applications'):olderList).append(card);
+   const reported=text('button','I submitted this application','secondary');reported.disabled=submitted;reported.addEventListener('click',()=>guarded(async()=>{await api('/api/browser/applications/'+row.id+'/reported-submitted',{method:'POST'});message('Recorded as user-reported; no confirmed submission evidence was inferred.');await Promise.all([refreshBrowser(),refreshM3(),refreshRecommendations(),refresh()]);}));tools.append(reported);if(row.job_id)tools.append(unavailableButton(row.job_id));details.append(tools);card.append(details);(index<5?$('browser-applications'):olderList).append(card);
  }
  if(older)$('browser-applications').append(older);
  if(typeof loadPriority==='function')loadPriority();

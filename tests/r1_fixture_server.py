@@ -1,9 +1,9 @@
 """Isolated API/worker/SQLite server for R1 Playwright, without real accounts."""
-import hashlib,json,subprocess,sys,tempfile,threading,re,os
+import hashlib,json,subprocess,sys,tempfile,threading,re
 from pathlib import Path
 from unittest.mock import patch
 import uvicorn
-from job_agent.database import Database
+from job_agent.database import Database,now
 from job_agent.main import create_app
 from job_agent.models import JobInput
 from job_agent.service import JobService
@@ -23,19 +23,28 @@ def main():
         (root/'documents').mkdir();(root/'documents/manifest.json').write_text(json.dumps({'documents':[{'canonical_name':'Resume.pdf','local_path':str(resume),'sha256':hashlib.sha256(resume.read_bytes()).hexdigest(),'status':'synthetic approved fixture'}]}))
         def seed(offset=0):
             for index in range(5):
-                service.import_rows([JobInput(source='r1-synthetic',source_job_id=str(offset+index),company='R1 Fixture '+str(offset+index),title='R1 Frontend '+str(index),location='Noida',work_mode='hybrid',description='Requirements\nReact and TypeScript are required.\nResponsibilities\nBuild accessible frontend components. '*8,skills=['react','typescript'],application_url='https://job-boards.greenhouse.io/r1-fixture/jobs/'+str(1000+offset+index),is_sample=True)])
+                service.import_rows([JobInput(source='r1-synthetic',source_job_id=str(offset+index),company='R1 Fixture '+str(offset+index),title='R1 Frontend '+str(index),location='Noida, India',work_mode='hybrid',description='Requirements\nReact and TypeScript are required.\nResponsibilities\nBuild accessible frontend components. '*8,skills=['react','typescript'],application_url='https://job-boards.greenhouse.io/r1-fixture/jobs/'+str(1000+offset+index),is_sample=True)])
             engine=M2DEngine(db)
             with db.transaction() as conn:
                 jobs=[dict(r) for r in conn.execute('SELECT * FROM jobs')]
             for job in jobs:
                 engine.set_operational_state(job['id'],OperationalFacts(active='PASS',india_eligible='PASS',headcount='PASS',direct_permanent_payroll='PASS',mandatory_requirements='PASS',work_mode='hybrid'),job_id=job['id'])
+                stamp=now()
                 with db.transaction() as conn:
+                    conn.execute('UPDATE source_references SET listing_url=?,last_seen=?,imported_at=? WHERE job_id=?',(job['application_url'],stamp,stamp,job['id']))
                     conn.execute('UPDATE jobs SET required_skills=?,required_experience_min=NULL,required_experience_max=NULL,match_score=? WHERE id=?',(json.dumps(['react','typescript']),[80,99,75,90,85][int(job['title'][-1])] if job['title'][-1].isdigit() else 99,job['id']))
-                    detail={'requirements_source':{'content_status':'FULL','source_url':job['application_url'],'description_sha256':hashlib.sha256(job['description'].encode()).hexdigest(),'retrieval_version':'r1-isolated-fixture'}}
+                    detail={'requirements_source':{'content_status':'FULL','source_url':job['application_url'],'description_sha256':hashlib.sha256(job['description'].encode()).hexdigest(),'retrieval_version':'r1-isolated-fixture','verified_at':stamp}}
                     from job_agent.requirement_clauses import inventory
                     observed=inventory({**job,'discovery_detail':detail})
                     detail['requirements_source']['nonmandatory_reviews']=[{'clause_id':c['id'],'source_excerpt':c['excerpt'],'source_hash':observed['source_hash'],'classification':'INFORMATIONAL','reviewer':'isolated fixture reviewer','evidence_ref':'fixture:responsibility-review'} for c in observed['clauses'] if c['excerpt'].startswith('Build accessible frontend components.')]
                     conn.execute('UPDATE jobs SET discovery_detail=? WHERE id=?',(json.dumps(detail),job['id']))
+                for kind,factual in (
+                    ('active','Vacancy is active and open for applications.'),
+                    ('india_eligible','Employer explicitly supports employment in India.'),
+                    ('headcount','Global workforce of 5,000 employees.'),
+                    ('direct_permanent_payroll','India employees are hired directly on permanent full-time payroll.'),
+                ):
+                    engine.record_evidence(job['id'],kind,'PASS',factual=factual,evidence_url=job['application_url'],verified_at=stamp)
                 M3Engine(db).prepare(job['id'])
         seed();app=create_app(db.path)
         @app.get('/__r1/priority-evidence')
@@ -62,10 +71,9 @@ def main():
         def stop_fixture_worker(process):
             if process.poll() is not None:return
             # This Popen object belongs exclusively to this disposable fixture.
-            # Kill its headless browser children too, so Windows releases log handles.
-            if os.name=='nt':subprocess.run(['taskkill','/PID',str(process.pid),'/T','/F'],capture_output=True,timeout=10,check=False)
-            else:process.terminate()
-            process.wait(timeout=10)
+            # Popen.kill uses the owned process handle on Windows; external taskkill
+            # may be denied even when this parent is allowed to terminate its child.
+            process.kill();process.wait(timeout=5)
         @app.post('/__r1/terminate-worker')
         def terminate():
             process=processes[-1]
@@ -77,19 +85,19 @@ def main():
                 return {'fixture_only':True,'schema':conn.execute('PRAGMA user_version').fetchone()[0],'events':conn.execute('SELECT count(*) FROM browser_worker_events').fetchone()[0],'drafts':conn.execute('SELECT count(*) FROM gmail_draft_operations').fetchone()[0],'submitted_jobs':conn.execute("SELECT count(*) FROM jobs WHERE status='SUBMITTED'").fetchone()[0]}
         @app.post('/__r1/unsupported-requirement')
         def unsupported():
-            service.import_rows([JobInput(source='r1-synthetic',source_job_id='unsupported',company='R1 Unsupported',title='R1 Unsupported Requirement',location='Noida',work_mode='hybrid',description='Requirements\nReact required.\nResponsibilities\nOnly graduates are considered.',skills=['unsupported-fixture-capability'],application_url='https://job-boards.greenhouse.io/r1-fixture/jobs/1099',is_sample=True)])
+            service.import_rows([JobInput(source='r1-synthetic',source_job_id='unsupported',company='R1 Unsupported',title='R1 Unsupported Requirement',location='Noida, India',work_mode='hybrid',description='Requirements\nReact required.\nResponsibilities\nOnly graduates are considered.',skills=['unsupported-fixture-capability'],application_url='https://job-boards.greenhouse.io/r1-fixture/jobs/1099',is_sample=True)])
             with db.transaction() as conn:
                 job=conn.execute("SELECT id FROM jobs WHERE company='R1 Unsupported'").fetchone()[0]
                 conn.execute("UPDATE jobs SET required_skills=?,required_experience_min=NULL,required_experience_max=NULL WHERE id=?",(json.dumps(['react']),job))
                 current=dict(conn.execute('SELECT * FROM jobs WHERE id=?',(job,)).fetchone())
-                detail={'requirements_source':{'content_status':'FULL','source_url':current['application_url'],'description_sha256':hashlib.sha256(current['description'].encode()).hexdigest(),'retrieval_version':'r1-isolated-fixture'}}
+                detail={'requirements_source':{'content_status':'FULL','source_url':current['application_url'],'description_sha256':hashlib.sha256(current['description'].encode()).hexdigest(),'retrieval_version':'r1-isolated-fixture','verified_at':now()}}
                 conn.execute('UPDATE jobs SET discovery_detail=? WHERE id=?',(json.dumps(detail),job))
             engine=M2DEngine(db);engine.set_operational_state(job,OperationalFacts(active='PASS',india_eligible='PASS',headcount='PASS',direct_permanent_payroll='PASS'),job_id=job)
             engine.enqueue(kind='VERIFICATION',source_id=None,stream='PIPELINE',category='MANDATORY_REQUIREMENTS',job_key=job,payload={'fact':'mandatory_requirements'})
             engine.execute_verification_tasks(1)
             with db.transaction() as conn:
-                evidence=conn.execute("SELECT state FROM job_evidence WHERE job_key=? AND kind='mandatory_requirements'",(job,)).fetchone()
-            return {'fixture_only':True,'job_id':job,'requirement_state':evidence[0]}
+                assessment=conn.execute('SELECT state FROM requirement_assessments WHERE job_id=? ORDER BY created_at DESC LIMIT 1',(job,)).fetchone()
+            return {'fixture_only':True,'job_id':job,'requirement_state':assessment['state']}
         server=uvicorn.Server(uvicorn.Config(app,host='127.0.0.1',port=8017,log_level='warning'))
         @app.post('/__r1/shutdown')
         def shutdown():

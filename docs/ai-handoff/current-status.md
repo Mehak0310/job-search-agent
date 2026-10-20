@@ -1,6 +1,24 @@
 # Shared AI handoff: current status
 
-Updated: 2026-10-19. Audience: ChatGPT, ChatGPT Codex and local VS Code Codex.
+Updated: 2026-10-20. Audience: ChatGPT, ChatGPT Codex and local VS Code Codex.
+
+## Superseding local milestone checkpoint
+
+The 2026-10-19 snapshot below is historical where it conflicts with this section. It is retained so earlier coordination claims are not silently erased.
+
+| Item | Current evidence |
+|---|---|
+| Repository checkout | `main`, base HEAD `e94340d61ee88aea137a878ad1e48ca860f3e60f` |
+| Working tree | Local application-recovery/eligibility milestone plus F1–F8 audit remediation are uncommitted; no commit, push, branch operation or publication occurred |
+| Authorization | The user authorized local source, synthetic tests and directly related documentation only; production/browser/Gmail/employer/schedule/submission actions remain prohibited |
+| Implemented | F1–F8 remediation addresses evidence timestamp reuse, fail-closed evidence interpretation, Applications privacy projection, country-aware locations, submission/readiness consistency, headcount ranges, policy documentation and regressions |
+| Verified | Independent F1–F8 audit corrections completed. Requirement provenance now requires credential-free HTTPS and its focused suite passed 99 tests. The latest full Windows Python run passed 583 tests at 91.94% aggregate coverage; the full synthetic UI passed 157 tests. The preceding F1–F8 run passed 576 Python tests at the same coverage. R2 passed 2 tests. The fixture-only R1 termination defect was repaired and R1 passed four consecutive isolated runs; relevant lifecycle Python passed 40 tests. Changed Python modules: eligibility 96%, employer evidence 100%, requirement clauses 100%, M2D 98%, browser store 97%, priority queue 94%. Exact commands and limitations are in [verification](verification.md). |
+| Blocked | No production database, current applications, live employer evidence or live form acceptance were inspected; no genuinely eligible five-candidate batch is established. |
+| Planned | Complete a final read-only publication review; separately authorize any production evidence check, service activation or live form acceptance; preserve the six-tab design approval boundary. |
+
+The approved freshness policy is 7 days for vacancy activity and vacancy/requirements evidence, and 90 days for employer headcount, India-employment and payroll evidence. Reuse preserves original verification times; missing, stale, contradictory, future-dated or unverifiable evidence remains unresolved. Synthetic test results do not establish live eligibility or employer-form acceptance.
+
+The original snapshot's `work` branch, pre-handoff baseline, pending publication and docs-only task statements are stale for this checkout. They remain below as historical coordination evidence. The prior live application counts are not revalidated by this local milestone.
 
 ## Authority and checkout
 

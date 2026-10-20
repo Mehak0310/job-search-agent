@@ -150,7 +150,7 @@ class M2DEngine:
         return created
 
     def execute_verification_tasks(self,limit=12):
-        """Resolve only facts supported by stored vacancy evidence; defer research facts explicitly."""
+        """Consume existing evidence without treating a task run as a new source check."""
         from .policy_hooks import check
         check('research_worker','VERIFICATION')
         stamp=now();lease=(datetime.fromisoformat(stamp.replace("Z","+00:00"))+timedelta(seconds=120)).isoformat().replace("+00:00","Z")
@@ -166,35 +166,50 @@ class M2DEngine:
             for row in rows:conn.execute("UPDATE m2d_tasks SET status='RUNNING',lease_until=?,attempts=attempts+1,updated_at=? WHERE task_id=?",(lease,stamp,row["task_id"]))
         result={"considered":len(rows),"attempted":len(rows),"resolved":0,"blocked":0,"deferred":0,"outcomes":[]}
         for row in rows:
-            fact=json.loads(row["payload"] or "{}").get("fact",row["category"].casefold());url=row["canonical_application_url"] or row["application_url"]
-            state=None;factual=None
-            state_column={"headcount":"headcount_state","direct_permanent_payroll":"payroll_state"}.get(fact)
-            if state_column and row[state_column] in {"PASS","FAIL"}:
-                state=row[state_column]
-                with self.db.transaction() as conn:evidence=conn.execute("SELECT factual,evidence_url FROM job_evidence WHERE job_key=? AND kind=? AND state=? ORDER BY verified_at DESC LIMIT 1",(row["job_key"],fact,state)).fetchone()
-                factual=evidence["factual"] if evidence else f"A prior sourced check recorded {fact.replace('_',' ')} as {state.casefold()}.";url=evidence["evidence_url"] if evidence and evidence["evidence_url"] else url
-            if fact in {"active","active_vacancy"} and row["activity_status"] in {"ACTIVE","CLOSED"}:
-                state="PASS" if row["activity_status"]=="ACTIVE" else "FAIL";factual=f"Stored official vacancy activity is {row['activity_status'].casefold()}."
-            elif fact in {"india_eligible","india_eligibility"} and row["eligibility_state"] in {"ELIGIBLE","INELIGIBLE"}:
-                state="PASS" if row["eligibility_state"]=="ELIGIBLE" else "FAIL";factual=f"Stored vacancy eligibility is {row['eligibility_state'].casefold()}."
+            fact=json.loads(row["payload"] or "{}").get("fact",row["category"].casefold())
+            state=None;gate_name=None;gate=None;evidence_time=None
+            fact_gates={
+                "active":"active","active_vacancy":"active",
+                "india_eligible":"india_employment","india_eligibility":"india_employment",
+                "headcount":"employer_size","direct_permanent_payroll":"payroll",
+            }
+            if fact in fact_gates:
+                from .eligibility import assess_hard_eligibility
+                gate_name=fact_gates[fact]
+                with self.db.transaction() as conn:
+                    job=dict(conn.execute("SELECT * FROM jobs WHERE id=?",(row["job_id"],)).fetchone())
+                    evidence=[dict(item) for item in conn.execute("SELECT * FROM job_evidence WHERE job_key=?",(row["job_key"],))]
+                    references=[dict(item) for item in conn.execute("SELECT listing_url,application_url,last_seen,imported_at FROM source_references WHERE job_id=?",(row["job_id"],))]
+                assessment=assess_hard_eligibility(job,evidence,references,at=datetime.fromisoformat(stamp.replace("Z","+00:00")))
+                gate=assessment["gates"][gate_name]
+                state=gate["state"]
+                evidence_time=max((item["verified_at"] for item in gate["evidence"]),default=None)
             elif fact=="mandatory_requirements":
                 from .requirements import assess_requirements,persist_assessment
                 with self.db.transaction() as conn:
                     profile=json.loads(conn.execute('SELECT config FROM candidate_profiles_v2 ORDER BY version DESC LIMIT 1').fetchone()[0])
                     job=dict(conn.execute('SELECT * FROM jobs WHERE id=?',(row['job_id'],)).fetchone())
                     evidence=[dict(e) for e in conn.execute('SELECT * FROM job_evidence WHERE job_key=?',(row['job_key'],))]
-                verdict=assess_requirements(profile,job,evidence);state=verdict['state'];factual=' '.join(verdict['reasons'])
+                verdict=assess_requirements(profile,job,evidence);state=verdict['state']
                 with self.db.transaction() as conn:persist_assessment(conn,job['id'],verdict)
-                url=(url or 'local:vacancy')+'#requirement-assessment='+verdict['assessment_id']
             if state:
-                self.record_evidence(row["job_key"],fact,state,factual=factual,evidence_url=url)
-                facts=OperationalFacts(active=TriState(row["active_state"]),india_eligible=TriState(row["india_state"]),headcount=TriState(state) if fact=="headcount" else TriState(row["headcount_state"]),direct_permanent_payroll=TriState(state) if fact=="direct_permanent_payroll" else TriState(row["payroll_state"]),mandatory_requirements=TriState(state) if fact=="mandatory_requirements" else TriState.PASS if row["verification"]=="FULLY_VERIFIED" else TriState.UNKNOWN,verified_recipient=TriState(row["recipient_state"]),work_mode=row["work_mode"] if row["work_mode"] in {"onsite","hybrid","remote"} else "unknown")
-                if fact in {"active","active_vacancy"}:facts=facts.model_copy(update={"active":TriState(state)})
-                if fact in {"india_eligible","india_eligibility"}:facts=facts.model_copy(update={"india_eligible":TriState(state)})
+                facts=OperationalFacts(active=TriState(row["active_state"]),india_eligible=TriState(row["india_state"]),headcount=TriState(row["headcount_state"]),direct_permanent_payroll=TriState(row["payroll_state"]),mandatory_requirements=TriState.PASS if row["verification"]=="FULLY_VERIFIED" else TriState.UNKNOWN,verified_recipient=TriState(row["recipient_state"]),work_mode=row["work_mode"] if row["work_mode"] in {"onsite","hybrid","remote"} else "unknown")
+                if gate_name=="active":facts=facts.model_copy(update={"active":TriState(state)})
+                elif gate_name=="india_employment":facts=facts.model_copy(update={"india_eligible":TriState(state)})
+                elif gate_name=="employer_size":facts=facts.model_copy(update={"headcount":TriState(state)})
+                elif gate_name=="payroll":facts=facts.model_copy(update={"direct_permanent_payroll":TriState(state)})
+                elif fact=="mandatory_requirements":facts=facts.model_copy(update={"mandatory_requirements":TriState(state)})
                 self.set_operational_state(row["job_key"],facts,job_id=row["job_id"],strong_fit=True)
-                resolved=state in {'PASS','FAIL'};task_state='COMPLETED' if resolved else 'BLOCKED' if state=='CONFLICT' else 'PARTIAL'
-                self.finish_task(row['task_id'],status=task_state,checkpoint={'fact':fact,'verdict':state,'evidence_url':url,'resolved_at':stamp},blocker=None if resolved else factual)
-                result['resolved' if resolved else 'blocked' if state=='CONFLICT' else 'deferred']+=1;outcome='resolved' if resolved else state.casefold()
+                resolved=state in {'PASS','FAIL'};task_state='COMPLETED' if resolved else 'BLOCKED' if gate_name or state=='CONFLICT' else 'PARTIAL'
+                checkpoint={'fact':fact,'verdict':state,'resolved_at':stamp}
+                if gate_name:
+                    checkpoint.update(
+                        evidence_verified_at=evidence_time,
+                        evidence_url=gate['evidence'][0]['evidence_url'] if gate['evidence'] else None,
+                        retry_condition='Retry when a current sourced record becomes available.',
+                    )
+                self.finish_task(row['task_id'],status=task_state,checkpoint=checkpoint,blocker=None if resolved else gate['reason'] if gate_name else 'Current mandatory requirement assessment remains unresolved.')
+                result['resolved' if resolved else 'blocked' if gate_name or state=='CONFLICT' else 'deferred']+=1;outcome='resolved' if resolved else state.casefold()
             else:
                 reason={"headcount":"Employer legal-entity headcount needs an external sourced check.","direct_permanent_payroll":"The vacancy does not establish permanent direct-employer payroll.","mandatory_requirements":"Mandatory requirements are not structured in the stored vacancy."}.get(fact,"No sufficient stored evidence for this fact.")
                 retry="Retry when a current official vacancy or sourced employer record changes."

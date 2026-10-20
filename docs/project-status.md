@@ -1,6 +1,35 @@
 # Local-first job research checkpoint
 
-Current priority: [live workflow repair](live-workflow-repair.md). At the latest recorded checkpoint, four applications were connected and awaiting inspection/eligibility verification; one was manually reported submitted but not independently verified; zero verified eligible pending candidates; and zero employer forms ready for review. A fresh eligible batch of five remains blocked. Historical targeted fixes and regression results are in the repair report. See [repair milestone plan](../specs/live-workflow-repair.md). No repair commit, push, field filling, upload or employer submission.
+## Current local work: F1–F8 audit remediation
+
+Base: branch `main`, commit `e94340d61ee88aea137a878ad1e48ca860f3e60f`. The changes below are local and uncommitted; no live workflow or production database was accessed.
+
+### Implemented
+
+- Verification tasks re-assess existing sourced evidence without writing new evidence or timestamps. Reused global headcount evidence retains its original `verified_at` and must be recent, HTTPS-sourced, scope-matched and above the applicable threshold.
+- India-employment and payroll checks use narrow affirmative/negative patterns; missing, ambiguous and contradictory text does not pass. Headcount ranges crossing the threshold remain unresolved, and explicit current below-threshold evidence fails.
+- Location eligibility requires a recent vacancy reference, explicit India location and an approved region; foreign-plus-India listings and unknown work modes remain unresolved.
+- The Applications API removes raw discovery metadata, descriptions and private Gmail message references after internal assessment. Manual submission outcomes dominate stale legacy readiness in backend and UI filters, with duplicate preparation actions disabled.
+- The approved policy is 7 days for vacancy activity and vacancy/requirements evidence, and 90 days for employer headcount, India-employment and payroll evidence. Missing, expired, future-dated, contradictory or unverifiable evidence remains `NEEDS_VERIFICATION`.
+
+### Verified
+
+- Full Windows Python regression: `.venv\Scripts\python.exe -m pytest -q -p no:cacheprovider --basetemp=data\codex-f1-f8-full-python-final` — **576 passed**, **91.94% aggregate coverage**. Changed Python module coverage: eligibility 96%, employer evidence 100%, requirement clauses 100%, M2D 98%, browser store 97%, priority queue 94%.
+- Focused Python regression: **159 passed** across requirements freshness, eligibility, employer evidence, verification-task, browser-application and priority-queue tests.
+- Complete synthetic UI: `npm.cmd run test:e2e -- --output=data\codex-f1-f8-playwright-final --reporter=list` — **157 passed**.
+- R1: **four consecutive isolated runs passed** after repairing the fixture-only termination path. Windows denied the fixture's external `taskkill`; the fixture now uses its owned process handle and avoids creating Chrome in the deliberate hold case. Relevant lifecycle Python: **40 passed**. R2 rerun: **2 passed**.
+- Focused manual-submission UI regression: **1 passed**; existing submitted-state UI regressions: **4 passed**. Pylance reports no diagnostics in eligibility, employer-evidence or browser-store modules. One Starlette/httpx deprecation warning remains.
+
+### Blocked and planned
+
+- Live eligibility evidence and current status of the four previously tracked applications were not rechecked. Synthetic passes do not establish employer eligibility or form readiness.
+- No five-candidate live batch is claimed. The queue returns fewer than five where fewer than five opportunities meet the verified gates.
+- Employer-specific work-authorization questions, live ATS compatibility, form read-back, production database migration/activation and visual acceptance remain unverified or planned.
+- No commit/push, service restart, schedule change, Gmail action, employer navigation, upload or submission occurred.
+
+The earlier live-workflow report below records a historical, separately authorized read-only checkpoint; its application counts are not a current-state inspection. The previous repair checkpoint is documented in [live workflow repair](live-workflow-repair.md) and [repair milestone plan](../specs/live-workflow-repair.md).
+
+## Historical privacy-refactor checkpoint
 
 Privacy refactor implemented and verified locally; legitimate concurrent operational activity confirmed by the user. Final publication approval remains required. This document is the sanitized publication handoff. Original operational notes and candidate-specific history were preserved under ignored local data before editing; they are not publication inputs.
 

@@ -1,6 +1,14 @@
 # Shared AI handoff: task queue
 
-Updated: 2026-10-19. Priority is not authorization. None of P1, P2 or P3 is started or assigned to an executing agent. A human must authorize scope and confirm the owner before work begins.
+Updated: 2026-10-20. Priority is not authorization. The local F1–F8 remediation is explicitly authorized by the user; P1, P2 and P3 remain queued and unauthorized.
+
+## Current authorized local remediation
+
+| Task | Owner | Dependencies | Acceptance | State |
+|---|---|---|---|---|
+| Audit remediation F1–F8 for the existing application-recovery and eligibility milestone | Local Codex session | Explicit user authorization; preserve the existing dirty milestone; local synthetic fixtures only | Preserve original evidence times; reject ambiguous/contradictory evidence; keep private discovery and Gmail references internal; require explicit India location; suppress readiness and duplicate action after any submitted outcome; interpret headcount ranges conservatively; retain all 55 tracker IDs and stages 1–8; run focused then relevant full regression | Source fixes and audit completed locally. Focused/full Python, full UI and R2 passed. The fixture-only R1 termination defect is repaired; R1 passed four consecutive runs and lifecycle Python passed 40 tests. No live verification or publication. |
+
+The earlier application-recovery milestone remains uncommitted. This remediation does not authorize the P2 visual redesign, live operations, publication or production activation. Freshness policy is approved: vacancy activity and vacancy/requirements evidence 7 days; employer headcount, India-employment and payroll evidence 90 days.
 
 | Priority / task | Owner | Dependencies | Acceptance criteria | Approval / state |
 |---|---|---|---|---|

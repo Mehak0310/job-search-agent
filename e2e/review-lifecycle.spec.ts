@@ -17,7 +17,7 @@ test('reported application disappears from active review and stays in history af
   await open(page,'browser-panel');await page.locator('#browser-applications .review-tools summary').first().click();await page.getByRole('button',{name:'I submitted this application',exact:true}).click();
   await expect(page.locator('#browser-applications .job')).toHaveCount(0);await expect(page.locator('.packet-card')).toHaveCount(0);
   await page.reload();await expect(page.locator('.packet-card')).toHaveCount(0);await expect(page.locator('#browser-progress')).toContainText('No browser forms');
-  await page.locator('#browser-history').check();await expect(page.locator('#browser-applications')).toContainText('USER REPORTED SUBMITTED');await page.locator('#browser-applications .review-tools summary').click();await expect(page.getByRole('button',{name:'I submitted this application'})).toBeDisabled();
+  await page.locator('#browser-history').check();await expect(page.locator('#browser-applications')).toContainText('Marked submitted manually; not independently verified');await page.locator('#browser-applications .review-tools summary').click();await expect(page.getByRole('button',{name:'I submitted this application'})).toBeDisabled();
 });
 
 test('unavailable link report removes packet and survives refresh',async({page,harness})=>{
