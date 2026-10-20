@@ -18,7 +18,7 @@ Current handoff and actual commands: [repair report](../docs/live-workflow-repai
 
 ## Successor milestone: eligibility and application review
 
-This work is a local, uncommitted extension based on `main` at `e94340d61ee88aea137a878ad1e48ca860f3e60f`; it does not replace the historical live-checkpoint observations above.
+This successor work was developed on `e94340d61ee88aea137a878ad1e48ca860f3e60f` and published to local and remote `main` as `4a3a3845474161764cf1aaf1578d851f56b7da29`; it does not replace the historical live-checkpoint observations above.
 
 | Area | Implemented behavior | Verification / remaining limit |
 |---|---|---|
@@ -28,4 +28,4 @@ This work is a local, uncommitted extension based on `main` at `e94340d61ee88aea
 | Recovery and persistence | Retain published recovery/session identity mechanisms; this milestone did not replace them. | Existing focused recovery regression passed as part of the Windows suite. No production browser session was inspected or changed. |
 | Validation | Latest post-audit-correction Windows Python: 583 passed, 91.94% aggregate coverage. Latest full synthetic UI: 157 passed. The immediately preceding F1-F8 run passed 576 Python tests at 91.94% coverage. R1 passed four consecutive isolated runs after its fixture-only termination correction; R2 passed 2 tests; relevant lifecycle Python passed 40 tests. Focused new-module coverage: eligibility 96%, employer evidence 100%. | Earlier milestone runs recorded 529 Python passes at 91.84% coverage and 156 UI passes before the final F1-F8 and R1 verification. Historical failures and exact commands remain in the verification ledger. These synthetic tests do not establish live form acceptance. |
 
-No database migration, production restart, browser/employer action, upload, Gmail operation, submission, schedule change, commit or push occurred in this successor milestone.
+The reviewed 28-file checkpoint was committed and pushed normally without force. No database migration, deployment, production restart, browser/employer action, upload, Gmail operation, submission or schedule change accompanied publication.

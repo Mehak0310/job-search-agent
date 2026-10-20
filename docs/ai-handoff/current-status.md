@@ -8,17 +8,22 @@ The 2026-10-19 snapshot below is historical where it conflicts with this section
 
 | Item | Current evidence |
 |---|---|
-| Repository checkout | `main`, base HEAD `e94340d61ee88aea137a878ad1e48ca860f3e60f` |
-| Working tree | Local application-recovery/eligibility milestone plus F1–F8 audit remediation are uncommitted; no commit, push, branch operation or publication occurred |
-| Authorization | The user authorized local source, synthetic tests and directly related documentation only; production/browser/Gmail/employer/schedule/submission actions remain prohibited |
+| Repository checkout | `main`, local and remote HEAD `4a3a3845474161764cf1aaf1578d851f56b7da29` |
+| Working tree | Clean at publication; exactly 28 approved source, test, fixture, specification and documentation files were committed and pushed normally without force |
+| Authorization | The user separately authorized the reviewed 28-file commit and normal push, now complete. Production/browser/Gmail/employer/schedule/submission actions remain prohibited without their own approval. |
 | Implemented | F1–F8 remediation addresses evidence timestamp reuse, fail-closed evidence interpretation, Applications privacy projection, country-aware locations, submission/readiness consistency, headcount ranges, policy documentation and regressions |
 | Verified | Independent F1–F8 audit corrections completed. Requirement provenance now requires credential-free HTTPS and its focused suite passed 99 tests. The latest full Windows Python run passed 583 tests at 91.94% aggregate coverage; the full synthetic UI passed 157 tests. The preceding F1–F8 run passed 576 Python tests at the same coverage. R2 passed 2 tests. The fixture-only R1 termination defect was repaired and R1 passed four consecutive isolated runs; relevant lifecycle Python passed 40 tests. Changed Python modules: eligibility 96%, employer evidence 100%, requirement clauses 100%, M2D 98%, browser store 97%, priority queue 94%. Exact commands and limitations are in [verification](verification.md). |
 | Blocked | No production database, current applications, live employer evidence or live form acceptance were inspected; no genuinely eligible five-candidate batch is established. |
-| Planned | Complete a final read-only publication review; separately authorize any production evidence check, service activation or live form acceptance; preserve the six-tab design approval boundary. |
+| Published | Checkpoint `4a3a3845474161764cf1aaf1578d851f56b7da29` is synchronized on local and remote `main`. Publication did not deploy, restart services or execute a live application workflow. |
+| Planned | Next: Stage 2 read-only reconciliation of four historical applications. Then verify real vacancy/employer eligibility, separately authorize one eligible prefill, and complete Command Center production visual acceptance. The five-eligible-vacancy goal remains pending. |
 
 The approved freshness policy is 7 days for vacancy activity and vacancy/requirements evidence, and 90 days for employer headcount, India-employment and payroll evidence. Reuse preserves original verification times; missing, stale, contradictory, future-dated or unverifiable evidence remains unresolved. Synthetic test results do not establish live eligibility or employer-form acceptance.
 
-The original snapshot's `work` branch, pre-handoff baseline, pending publication and docs-only task statements are stale for this checkout. They remain below as historical coordination evidence. The prior live application counts are not revalidated by this local milestone.
+Approved product policy now permits automatic creation of unsent Gmail drafts only after recipient, role, eligibility, employer-evidence, grounding, exact-preview, audit and recovery gates pass. The live adapter remains disabled; implementation, security verification and release testing are pending. Sending, forwarding and reply-sending still require separate explicit authorization, and automatic application submission remains prohibited.
+
+LinkedIn and Naukri coverage remains incomplete and source-specific. A later authorized phase may evaluate permitted saved-search alerts, public employer career links, structured manual imports and `https://techreferrals.in` as a supplementary, unverified referral source. No such integration is implemented, and Stage 2 remains the next operational milestone.
+
+The original snapshot's `work` branch, pre-handoff baseline, pending publication and docs-only task statements are historical. They remain below as coordination evidence. The prior live application counts were not revalidated by publication.
 
 ## Authority and checkout
 

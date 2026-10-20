@@ -4,7 +4,7 @@ Recorded: 2026-10-20. Keep observed results, historical reports and unrun checks
 
 ## Current local application-recovery/eligibility milestone
 
-Observed in the current Windows workspace on base branch `main`, HEAD `e94340d61ee88aea137a878ad1e48ca860f3e60f`, with the implementation and test changes uncommitted. All database and browser work in this section used synthetic fixtures; no live employer, production database, Gmail or current application state was accessed.
+The commands below were observed in the Windows workspace before publication while the implementation was based on `e94340d61ee88aea137a878ad1e48ca860f3e60f`. The exact reviewed 28-file result was subsequently committed and pushed to local and remote `main` as `4a3a3845474161764cf1aaf1578d851f56b7da29`. Publication used a normal non-force push and did not rerun these tests, deploy, or access live employer, production database, Gmail or current application state.
 
 | Exact command | Result |
 |---|---|
@@ -33,6 +33,10 @@ Observed in the current Windows workspace on base branch `main`, HEAD `e94340d61
 Coverage in the latest full Python run for changed modules: `eligibility.py` 96%, `employer_evidence.py` 100%, `requirement_clauses.py` 100%, `m2d.py` 98%, `priority_queue.py` 94%, `browser_store.py` 97%. The post-audit correction added seven requirement-source URL cases, raising the full Python count from the preceding 576 to 583 without changing aggregate coverage. No tests were skipped or assertions suppressed. R1 root cause was fixture-only: Windows denied the fixture's external `taskkill` command, its nonzero result was ignored, and `process.wait` timed out. The fixture now terminates its owned `Popen` handle directly and does not create a Chrome child for the deliberate hold case. Production lease expiry and durable `INTERRUPTED` recovery were unchanged. Four consecutive R1 runs passed after the correction.
 
 These results verify local deterministic behavior only. They do not establish that any real vacancy is eligible, that the previously tracked applications are currently reviewable, that five eligible opportunities exist, or that any live ATS form is accepted. The approved freshness windows are 7 days for vacancy evidence and 90 days for employer evidence.
+
+Publication verification: the pre-commit audit returned `READY_TO_COMMIT`; the commit contained exactly 28 approved files; `git diff --cached --check` and the commit whitespace check passed; local and remote `main` both resolved to `4a3a3845474161764cf1aaf1578d851f56b7da29`; the working tree was clean and local/remote divergence was `0 0`. This records Git publication only, not a fresh application test or runtime acceptance run.
+
+Documentation-only tracker reconciliation checked 55 unique issue IDs (`A01`–`A55`), all eight delivery stages, Markdown-only scope, local links, table shape, publication SHA references and targeted credential/private-path patterns. `git diff --check` passed. No Python or Playwright suite was rerun, and no live system was accessed.
 
 ## Historical local Windows evidence
 
@@ -64,6 +68,12 @@ Observed during the preceding cloud onboarding session, on the shared baseline w
 All 26 Python errors were attributed to browser fixtures hardcoding the Windows Chrome executable. They are errors, not passed or skipped tests. The lower coverage is the result of the incomplete Linux run, not evidence of an accepted gate exception. [P1](task-queue.md) must address portability in a separately authorized coding task; keep assertions and the 90% gate intact.
 
 Cloud R1/R2 browser integration suites were **not run**. Full Windows/Linux parity, production activation, production visual acceptance, live-provider behavior and complete accessibility review are **not established**. Passing browser functionality does not prove screenshot parity or approve the visual baseline.
+
+## Consolidated tracker addendum verification
+
+On 2026-10-20, documentation-only checks were run against base commit `4a3a3845474161764cf1aaf1578d851f56b7da29` plus the eight preserved Markdown edits. PowerShell row checks found 55 issue rows, 55 unique IDs spanning A01–A55 and eight delivery-stage rows. Targeted content review confirmed the published checkpoint and latest 583 Python/91.94% coverage, 157 synthetic Playwright, four consecutive R1, two-test R2 and 40-test lifecycle results remain intact and historical totals remain labelled as historical.
+
+The same review confirmed the approved Gmail draft-only policy, incomplete LinkedIn/Naukri coverage, candidate TechReferrals evaluation, expanded read-only Gmail discovery, persisted Command Center acceptance criteria and Stage 2 priority are represented without implementation-complete claims. No application tests were rerun because this task changes documentation only. `git diff --check` and final changed-path/privacy checks are recorded from the completed task result; no live service, production database, Gmail account, employer site or application workflow was accessed.
 
 ## Initial documentation setup verification
 

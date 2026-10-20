@@ -1,8 +1,8 @@
 # Local-first job research checkpoint
 
-## Current local work: F1–F8 audit remediation
+## Published F1–F8 and R1 checkpoint
 
-Base: branch `main`, commit `e94340d61ee88aea137a878ad1e48ca860f3e60f`. The changes below are local and uncommitted; no live workflow or production database was accessed.
+Branch `main` is published at `4a3a3845474161764cf1aaf1578d851f56b7da29`. Exactly 28 approved files were committed and pushed normally without force; local and remote were synchronized and the working tree was clean at publication. No deployment, live workflow or production database was accessed.
 
 ### Implemented
 
@@ -14,7 +14,7 @@ Base: branch `main`, commit `e94340d61ee88aea137a878ad1e48ca860f3e60f`. The chan
 
 ### Verified
 
-- Full Windows Python regression: `.venv\Scripts\python.exe -m pytest -q -p no:cacheprovider --basetemp=data\codex-f1-f8-full-python-final` — **576 passed**, **91.94% aggregate coverage**. Changed Python module coverage: eligibility 96%, employer evidence 100%, requirement clauses 100%, M2D 98%, browser store 97%, priority queue 94%.
+- Latest full Windows Python regression: **583 passed**, **91.94% aggregate coverage**; the preceding F1–F8 run had 576 passes at the same coverage. Changed Python module coverage: eligibility 96%, employer evidence 100%, requirement clauses 100%, M2D 98%, browser store 97%, priority queue 94%.
 - Focused Python regression: **159 passed** across requirements freshness, eligibility, employer evidence, verification-task, browser-application and priority-queue tests.
 - Complete synthetic UI: `npm.cmd run test:e2e -- --output=data\codex-f1-f8-playwright-final --reporter=list` — **157 passed**.
 - R1: **four consecutive isolated runs passed** after repairing the fixture-only termination path. Windows denied the fixture's external `taskkill`; the fixture now uses its owned process handle and avoids creating Chrome in the deliberate hold case. Relevant lifecycle Python: **40 passed**. R2 rerun: **2 passed**.
@@ -25,7 +25,11 @@ Base: branch `main`, commit `e94340d61ee88aea137a878ad1e48ca860f3e60f`. The chan
 - Live eligibility evidence and current status of the four previously tracked applications were not rechecked. Synthetic passes do not establish employer eligibility or form readiness.
 - No five-candidate live batch is claimed. The queue returns fewer than five where fewer than five opportunities meet the verified gates.
 - Employer-specific work-authorization questions, live ATS compatibility, form read-back, production database migration/activation and visual acceptance remain unverified or planned.
-- No commit/push, service restart, schedule change, Gmail action, employer navigation, upload or submission occurred.
+- Publication did not include a service restart, schedule change, Gmail action, employer navigation, upload, submission or deployment.
+- Product policy permits future automatic creation of unsent Gmail drafts after all recipient, relevance, eligibility, employer-evidence, grounding, preview, audit and recovery gates pass. The live adapter remains disabled pending implementation, security verification and release testing; sending and automatic employer submission remain prohibited.
+- LinkedIn and Naukri coverage is incomplete. Permitted alerts, public employer links, structured manual imports and TechReferrals as a supplementary unverified referral source require later investigation; no new source integration is implemented.
+- The selected six-tab Command Center prototype and design contract remain unchanged. Later acceptance must use persisted per-source coverage, original referral attribution, eligibility/verification and complete Gmail draft lifecycle states without invented readiness or recruiter details.
+- Stage 2 read-only reconciliation remains the next operational milestone.
 
 The earlier live-workflow report below records a historical, separately authorized read-only checkpoint; its application counts are not a current-state inspection. The previous repair checkpoint is documented in [live workflow repair](live-workflow-repair.md) and [repair milestone plan](../specs/live-workflow-repair.md).
 

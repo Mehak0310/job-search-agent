@@ -1,16 +1,20 @@
 # Local-first job research checkpoint
 
-## Current local handoff
+## Current published handoff
 
-The current uncommitted milestone is based on `main` at `e94340d61ee88aea137a878ad1e48ca860f3e60f`. It adds evidence-backed eligibility checks, mode-specific employer-size validation, closed-alias exclusion, richer Applications projections and synthetic UI failure-isolation coverage.
+The milestone is published on local and remote `main` at `4a3a3845474161764cf1aaf1578d851f56b7da29`. Its 28 approved files add evidence-backed eligibility checks, mode-specific employer-size validation, closed-alias exclusion, richer Applications projections and synthetic UI failure-isolation coverage.
 
 **Implemented:** deterministic gates require recent sourced evidence; queue and browser-preparation checks share those gates; the UI displays blockers and safe next actions without overstating ready states; batch selection remains capped at five and may return fewer.
 
-**Verified:** focused Python passed 159 tests; full Windows Python passed 576 tests with 91.94% aggregate coverage. The complete synthetic UI suite passed 157 tests and R2 passed two. After a fixture-only Windows process-control repair, R1 passed four consecutive runs; relevant lifecycle Python passed 40 tests and R2 passed again. Exact commands are in [project status](project-status.md).
+**Verified:** latest full Windows Python passed 583 tests with 91.94% aggregate coverage; the preceding F1–F8 run passed 576. The complete synthetic UI suite passed 157 tests with zero skips and R2 passed two. After a fixture-only Windows process-control repair, R1 passed four consecutive runs; relevant lifecycle Python passed 40 tests. Exact commands are in [verification](ai-handoff/verification.md).
 
 **Blocked / planned:** current production records, Chrome sessions, live employer evidence and a genuinely eligible batch were not inspected. No five-candidate or live-form acceptance is claimed. The approved freshness policy is 7 days for vacancy evidence and 90 days for employer evidence. Employer-specific work authorization, live ATS form acceptance and production activation remain unverified.
 
-No commit/push, service restart, schedule change, Gmail operation, employer form interaction, upload or submission was performed in this milestone. The earlier live-workflow report below records a historical read-only checkpoint; its application counts are not current-state inspection.
+**Approved policy, pending implementation:** automatic creation of unsent Gmail drafts is permitted only after verified recipient and role relevance, current eligibility and employer evidence, approved-fact grounding, exact preview, durable audit history, duplicate prevention, uncertain-outcome recovery and preservation of user edits. The live adapter remains disabled pending implementation, security verification and release testing. Sending, forwarding, reply-sending and automatic employer submission remain prohibited without their own authorization.
+
+**Discovery gap:** LinkedIn and Naukri are not comprehensively covered by Gmail alerts or indirect ATS links. Later work may evaluate permitted saved-search alerts, public employer links, structured manual imports and TechReferrals as a supplementary unverified source; no integration or complete-coverage claim exists. Stage 2 read-only application reconciliation remains next.
+
+The checkpoint was committed and pushed normally without force. No deployment, service restart, schedule change, Gmail operation, employer form interaction, upload or submission accompanied publication. The earlier live-workflow report below records a historical read-only checkpoint; its application counts are not current-state inspection.
 
 ## Historical workflow checkpoint
 
