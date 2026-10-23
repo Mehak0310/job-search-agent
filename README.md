@@ -1,4 +1,21 @@
-﻿# Local AI Job Search & Application Agent
+# Local AI Job Search & Application Agent
+
+## Portfolio overview
+
+**Job discovery and review workflow:** A local Python/FastAPI app for source-aware vacancy collection, eligibility checks, explainable matching and human-reviewed application preparation.
+
+```mermaid
+flowchart LR
+  A[Supported job feeds] --> B[Normalize and deduplicate]
+  B --> C[Eligibility and ranking]
+  C --> D[Dashboard review]
+  D --> E[Prepare application]
+  E --> F[User submits manually]
+```
+
+Restricted boards and unverifiable openings require manual review. Do not interpret the project as autonomous portal submission, email sending, or a completed Command Center. See [source coverage](specs/source-platform-matrix.md).
+
+---
 
 ## Milestone 2B: local recommendation intelligence
 
